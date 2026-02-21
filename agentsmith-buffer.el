@@ -427,6 +427,7 @@ Users can override bindings with `keymap-set'."
   :parent magit-section-mode-map
   "g"           #'agentsmith-buffer-refresh
   "c"           #'agentsmith-create-workspace
+  "q"           #'quit-window
   "?"           #'agentsmith-dispatch)
 
 (define-derived-mode agentsmith-mode magit-section-mode "AgentSmith"
@@ -459,7 +460,8 @@ Users can override bindings with `keymap-set'."
     (kbd "RET")          #'agentsmith-open-at-point
     (kbd "S-<return>")   #'agentsmith-agent-popup-at-point
     "a"                  #'agentsmith-agent-at-point
-    "d"                  #'agentsmith-delete-at-point)
+    "d"                  #'agentsmith-delete-at-point
+    "q"                  #'quit-window)
   (add-hook 'agentsmith-mode-hook #'evil-normalize-keymaps))
 
 (provide 'agentsmith-buffer)
