@@ -284,19 +284,29 @@ otherwise starts an agent directly."
 
 (defun agentsmith-worktree-agent-popup-at-point ()
   "Show the agent buffer for the worktree at point in a popup.
-If no agentsmith session exists, tries to auto-detect an externally
-started agent via the default backend's detect-buffer."
+Cascading behavior:
+1. Show existing agentsmith-tracked session buffer
+2. Auto-detect externally started agent buffer
+3. Start a new agent with the default backend, then show its buffer"
   (interactive)
   (if-let* ((wt (agentsmith--worktree-at-point)))
       (let ((session (agentsmith-worktree-agent-session wt)))
-        (if session
-            (agentsmith-agent-show-buffer session)
-          ;; Auto-detect: try finding an existing buffer via default backend
-          (let ((buf (agentsmith-agent-detect-buffer-for-dir
+        (cond
+         ;; 1. Existing tracked session
+         (session
+          (agentsmith-agent-show-buffer session))
+         ;; 2. Auto-detect externally started buffer
+         ((let ((buf (agentsmith-agent-detect-buffer-for-dir
                       (agentsmith-worktree-path wt))))
-            (if (and buf (buffer-live-p buf))
-                (funcall agentsmith-agent-popup-function buf)
-              (user-error "No agent running for this worktree")))))
+            (when (and buf (buffer-live-p buf))
+              (funcall agentsmith-agent-popup-function buf)
+              t)))
+         ;; 3. Nothing found — start a new agent and show it
+         (t
+          (let ((new-session (agentsmith-agent-start-for-worktree wt)))
+            (agentsmith-agent-show-buffer new-session)
+            (when (derived-mode-p 'agentsmith-mode)
+              (agentsmith-buffer-refresh))))))
     (user-error "No worktree at point")))
 
 (defun agentsmith-worktree-agent-at-point ()
