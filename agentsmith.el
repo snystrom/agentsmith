@@ -171,5 +171,26 @@ then opens the agent for the selected worktree using the cascade logic
              (wt (cdr (assoc choice candidates))))
         (agentsmith-agent-popup-for-worktree wt)))))
 
+;;;###autoload
+(defun agentsmith-workspace-list ()
+  "Select a registered workspace and switch to it as a project.
+Uses `completing-read' to list all registered workspaces, then
+switches to the selected one via `projectile-switch-project-action'."
+  (interactive)
+  (let ((all-ws (agentsmith-workspace-load-all)))
+    (unless all-ws
+      (user-error "No registered workspaces found"))
+    (let* ((candidates
+            (mapcar (lambda (ws)
+                      (cons (format "%s  %s"
+                                    (agentsmith-workspace-name ws)
+                                    (abbreviate-file-name
+                                     (agentsmith-workspace-directory ws)))
+                            ws))
+                    all-ws))
+           (choice (completing-read "Workspace: " candidates nil t))
+           (ws (cdr (assoc choice candidates))))
+      (agentsmith--switch-to-project (agentsmith-workspace-directory ws)))))
+
 (provide 'agentsmith)
 ;;; agentsmith.el ends here

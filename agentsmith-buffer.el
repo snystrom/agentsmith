@@ -41,15 +41,16 @@ Customize this to change how agent status is shown in the buffer."
 (defcustom agentsmith-worktree-open-function #'agentsmith-worktree-open-default
   "Function called to open a worktree.
 Receives one argument: the `agentsmith-worktree' struct.
-Default opens the directory with `dired'.
-Set to a custom function to integrate with projectile, project.el, etc."
+Default switches to the worktree as a projectile project.
+Override to customize behavior, e.g. for project.el integration."
   :type 'function
   :group 'agentsmith-buffer)
 
 (defcustom agentsmith-workspace-open-function #'agentsmith-workspace-open-default
   "Function called to open a workspace.
 Receives one argument: the `agentsmith-workspace' struct.
-Default opens the workspace directory with `dired'."
+Default switches to the workspace as a projectile project.
+Override to customize behavior, e.g. for project.el integration."
   :type 'function
   :group 'agentsmith-buffer)
 
@@ -97,6 +98,7 @@ Default opens the workspace directory with `dired'."
   :doc "Keymap for workspace sections in the agentsmith buffer.
 Active when point is on a workspace heading."
   "RET"         #'agentsmith-workspace-open-at-point
+  "D"           #'agentsmith-workspace-dired-at-point
   "a"           #'agentsmith-workspace-agent-at-point
   "w"           #'agentsmith-workspace-add-worktree-at-point
   "d"           #'agentsmith-workspace-delete-at-point
@@ -106,6 +108,7 @@ Active when point is on a workspace heading."
   :doc "Keymap for worktree sections in the agentsmith buffer.
 Active when point is on a worktree line."
   "RET"         #'agentsmith-worktree-open-at-point
+  "D"           #'agentsmith-worktree-dired-at-point
   "S-<return>"  #'agentsmith-worktree-agent-popup-at-point
   "a"           #'agentsmith-worktree-agent-at-point
   "d"           #'agentsmith-worktree-remove-at-point)
@@ -196,15 +199,37 @@ backend directly (detects externally-started agents)."
                 (propertize branch 'face 'agentsmith-branch)
                 (propertize path 'face 'agentsmith-path))))))
 
+;;; Project Switching
+
+(declare-function projectile-add-known-project "projectile" (project-root))
+
+(defun agentsmith--switch-to-project (directory)
+  "Switch to DIRECTORY, using its parent workspace as the projectile project.
+Sets `default-directory' to DIRECTORY so the file finder starts there,
+but registers the workspace root as the projectile project.  Falls back
+to DIRECTORY itself if no workspace is found.  Doom Emacs and other
+frameworks override `projectile-switch-project-action' to provide their
+own file-finding behavior."
+  (let* ((dir (file-name-as-directory (expand-file-name directory)))
+         (ws (agentsmith-workspace-find-by-directory dir))
+         (project-dir (if ws
+                          (file-name-as-directory
+                           (agentsmith-workspace-directory ws))
+                        dir)))
+    (projectile-add-known-project project-dir)
+    (let ((projectile-project-root project-dir)
+          (default-directory dir))
+      (funcall projectile-switch-project-action))))
+
 ;;; Default Open Functions
 
 (defun agentsmith-worktree-open-default (worktree)
-  "Default function to open WORKTREE -- opens in dired."
-  (dired (agentsmith-worktree-path worktree)))
+  "Default function to open WORKTREE -- switches to it as a project."
+  (agentsmith--switch-to-project (agentsmith-worktree-path worktree)))
 
 (defun agentsmith-workspace-open-default (workspace)
-  "Default function to open WORKSPACE -- opens in dired."
-  (dired (agentsmith-workspace-directory workspace)))
+  "Default function to open WORKSPACE -- switches to it as a project."
+  (agentsmith--switch-to-project (agentsmith-workspace-directory workspace)))
 
 ;;; Section Commands -- Workspace
 
@@ -403,6 +428,30 @@ On a workspace, starts or shows the workspace agent."
         (agentsmith-buffer-refresh))))
    (t (user-error "No workspace or worktree at point"))))
 
+;;; Dired Commands
+
+(defun agentsmith-workspace-dired-at-point ()
+  "Open the workspace at point in dired."
+  (interactive)
+  (if-let* ((ws (agentsmith--workspace-at-point)))
+      (dired (agentsmith-workspace-directory ws))
+    (user-error "No workspace at point")))
+
+(defun agentsmith-worktree-dired-at-point ()
+  "Open the worktree at point in dired."
+  (interactive)
+  (if-let* ((wt (agentsmith--worktree-at-point)))
+      (dired (agentsmith-worktree-path wt))
+    (user-error "No worktree at point")))
+
+(defun agentsmith-dired-at-point ()
+  "Open the workspace or worktree at point in dired."
+  (interactive)
+  (cond
+   ((agentsmith--worktree-at-point) (agentsmith-worktree-dired-at-point))
+   ((agentsmith--workspace-at-point) (agentsmith-workspace-dired-at-point))
+   (t (user-error "Nothing at point"))))
+
 ;;; Mode Definition
 
 (defvar-keymap agentsmith-mode-map
@@ -445,6 +494,7 @@ Users can override bindings with `keymap-set'."
     (kbd "S-<return>")   #'agentsmith-agent-popup-at-point
     "a"                  #'agentsmith-agent-at-point
     "d"                  #'agentsmith-delete-at-point
+    "D"                  #'agentsmith-dired-at-point
     "q"                  #'quit-window)
   (add-hook 'agentsmith-mode-hook #'evil-normalize-keymaps))
 
