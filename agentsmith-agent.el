@@ -200,6 +200,18 @@ Returns a status symbol."
         (agentsmith-agent--call backend 'status directory)
       (error 'stopped))))
 
+;;; Agent Toggle
+
+(defun agentsmith-agent-toggle-buffer (directory &optional backend)
+  "Toggle visibility of the agent buffer for DIRECTORY.
+If the agent buffer is visible in a window, delete that window and
+return nil.  Otherwise return the buffer (or nil if none exists),
+leaving the caller to show or start it."
+  (let ((buf (agentsmith-agent-detect-buffer-for-dir directory backend)))
+    (if-let* ((win (and buf (get-buffer-window buf t))))
+        (progn (delete-window win) nil)
+      buf)))
+
 ;;; Agent Popup Logic
 
 (defun agentsmith-agent-popup-for-worktree (worktree)

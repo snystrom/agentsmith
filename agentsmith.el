@@ -141,6 +141,40 @@ falling back to direct workspace lookup."
     (agentsmith-agent-popup-for-workspace ws)))
 
 ;;;###autoload
+(defun agentsmith-worktree-toggle-agent ()
+  "Toggle the agent for the worktree containing the current directory.
+If the agent buffer is visible, hide it.  Otherwise show or start it."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (match (agentsmith-worktree-find-by-directory dir)))
+    (unless match
+      (user-error "Current directory is not inside a registered worktree"))
+    (let ((result (agentsmith-agent-toggle-buffer
+                   (agentsmith-worktree-path (cdr match)))))
+      ;; result is nil if window was hidden, otherwise fall through to popup
+      (when (or result
+                (not (agentsmith-agent-detect-buffer-for-dir
+                      (agentsmith-worktree-path (cdr match)))))
+        (agentsmith-agent-popup-for-worktree (cdr match))))))
+
+;;;###autoload
+(defun agentsmith-workspace-toggle-agent ()
+  "Toggle the agent for the workspace containing the current directory.
+If the agent buffer is visible, hide it.  Otherwise show or start it."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (ws (or (car (agentsmith-worktree-find-by-directory dir))
+                 (agentsmith-workspace-find-by-directory dir))))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (let ((result (agentsmith-agent-toggle-buffer
+                   (agentsmith-workspace-directory ws))))
+      (when (or result
+                (not (agentsmith-agent-detect-buffer-for-dir
+                      (agentsmith-workspace-directory ws))))
+        (agentsmith-agent-popup-for-workspace ws)))))
+
+;;;###autoload
 (defun agentsmith-workspace-select-worktree-agent ()
   "Interactively select a worktree in the current workspace and open its agent.
 Lists all worktrees in the workspace containing `default-directory',
