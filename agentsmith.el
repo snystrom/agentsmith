@@ -1,0 +1,115 @@
+;;; agentsmith.el --- Manage coding agent workflows across projects  -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2025-2026
+
+;; Author: Spencer Nystrom
+;; Version: 0.1.0
+;; Package-Requires: ((emacs "29.1") (magit-section "4.0.0") (transient "0.5.0"))
+;; Keywords: tools, processes, vc
+;; URL: https://github.com/snystrom/agentsmith
+
+;; This file is not part of GNU Emacs.
+
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+;;; Commentary:
+
+;; AgentSmith is an Emacs major mode for managing coding agent workflows
+;; across multiple projects and repositories.
+;;
+;; Core concepts:
+;; - Workspace: a directory bundling git/jj worktrees from multiple repos
+;; - Worktree: a git worktree or jj workspace within an agentsmith workspace
+;; - Agent session: a running coding agent (e.g., claude-code-ide) attached
+;;   to a workspace or worktree
+;;
+;; The main buffer displays a hierarchical view:
+;;   Workspace
+;;     Worktree (with agent status)
+;;     Worktree (with agent status)
+;;
+;; Features:
+;; - Create workspaces that bundle worktrees from multiple repos
+;; - Autodetect git vs jujutsu and use appropriate worktree commands
+;; - Pluggable agent backend protocol (ships with claude-code-ide)
+;; - Section-based navigation with magit-section
+;; - Transient popup menus for all operations
+;; - Fully extensible keybindings, agent backends, and behaviors
+;;
+;; Usage:
+;;   M-x agentsmith          -- Open the AgentSmith status buffer
+;;   M-x agentsmith-create-workspace -- Create a new workspace
+;;
+;; Extensibility:
+;; - Register agent backends via `agentsmith-agent-backends'
+;; - Customize open behavior via `agentsmith-worktree-open-function'
+;; - Override keybindings via `agentsmith-mode-map' and section maps
+;; - Extend transient menus via `transient-append-suffix'
+;; - Hook into workspace creation via `agentsmith-after-workspace-create-hook'
+
+;;; Code:
+
+(require 'agentsmith-workspace)
+(require 'agentsmith-worktree)
+(require 'agentsmith-agent)
+(require 'agentsmith-buffer)
+(require 'agentsmith-transient)
+
+;;; Customization Group (top-level)
+
+(defgroup agentsmith nil
+  "Manage coding agent workflows across projects."
+  :group 'tools
+  :prefix "agentsmith-")
+
+;;; Buffer Name
+
+(defcustom agentsmith-buffer-name "*agentsmith*"
+  "Name of the AgentSmith status buffer."
+  :type 'string
+  :group 'agentsmith)
+
+;;; Entry Points
+
+;;;###autoload
+(defun agentsmith ()
+  "Open the AgentSmith status buffer.
+Creates the buffer if it doesn't exist, loads all registered workspaces,
+and displays the hierarchical workspace/worktree view."
+  (interactive)
+  (let ((buf (get-buffer-create agentsmith-buffer-name)))
+    (with-current-buffer buf
+      (unless (derived-mode-p 'agentsmith-mode)
+        (agentsmith-mode))
+      (setq agentsmith--workspaces (agentsmith-workspace-load-all))
+      (agentsmith-buffer-refresh))
+    (pop-to-buffer-same-window buf)))
+
+;;;###autoload
+(defun agentsmith-create-workspace ()
+  "Interactively create a new workspace and refresh the buffer."
+  (interactive)
+  (let ((ws (call-interactively #'agentsmith-workspace-create-interactive)))
+    (when ws
+      ;; If we're in the agentsmith buffer, add and refresh
+      (when-let* ((buf (get-buffer agentsmith-buffer-name)))
+        (with-current-buffer buf
+          (push ws agentsmith--workspaces)
+          (agentsmith-buffer-refresh)))
+      ;; Open the agentsmith buffer if not already open
+      (unless (get-buffer-window agentsmith-buffer-name)
+        (agentsmith)))))
+
+(provide 'agentsmith)
+;;; agentsmith.el ends here
