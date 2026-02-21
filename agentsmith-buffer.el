@@ -374,6 +374,51 @@ is derived from the repo basename for identification."
       (message "Added worktree: %s (%s)" repo-basename vcs)
       wt)))
 
+;;; Unified Dispatch Commands
+;; Context-sensitive commands that check workspace vs worktree at point.
+;; Used by evil normal-state bindings and available for general use.
+
+(defun agentsmith-open-at-point ()
+  "Open the workspace or worktree at point."
+  (interactive)
+  (cond
+   ((agentsmith--worktree-at-point) (agentsmith-worktree-open-at-point))
+   ((agentsmith--workspace-at-point) (agentsmith-workspace-open-at-point))
+   (t (user-error "Nothing at point"))))
+
+(defun agentsmith-agent-at-point ()
+  "Open agent transient for the workspace or worktree at point."
+  (interactive)
+  (cond
+   ((agentsmith--worktree-at-point) (agentsmith-worktree-agent-at-point))
+   ((agentsmith--workspace-at-point) (agentsmith-workspace-agent-at-point))
+   (t (user-error "No workspace or worktree at point"))))
+
+(defun agentsmith-delete-at-point ()
+  "Delete the workspace or remove the worktree at point."
+  (interactive)
+  (cond
+   ((agentsmith--worktree-at-point) (agentsmith-worktree-remove-at-point))
+   ((agentsmith--workspace-at-point) (agentsmith-workspace-delete-at-point))
+   (t (user-error "Nothing at point"))))
+
+(defun agentsmith-agent-popup-at-point ()
+  "Show agent buffer for the workspace or worktree at point.
+On a worktree, cascades: show existing → autodetect → start new.
+On a workspace, starts or shows the workspace agent."
+  (interactive)
+  (cond
+   ((agentsmith--worktree-at-point) (agentsmith-worktree-agent-popup-at-point))
+   ((agentsmith--workspace-at-point)
+    (let ((ws (agentsmith--workspace-at-point)))
+      (if-let* ((session (agentsmith-workspace-agent-session ws)))
+          (agentsmith-agent-show-buffer session)
+        (let ((new-session (agentsmith-agent-start-for-workspace ws)))
+          (agentsmith-agent-show-buffer new-session)
+          (when (derived-mode-p 'agentsmith-mode)
+            (agentsmith-buffer-refresh))))))
+   (t (user-error "No workspace or worktree at point"))))
+
 ;;; Mode Definition
 
 (defvar-keymap agentsmith-mode-map
@@ -402,6 +447,20 @@ Users can override bindings with `keymap-set'."
 (defun agentsmith--bookmark-handler (_record)
   "Handle an agentsmith bookmark RECORD."
   (agentsmith))
+
+;;; Evil Integration
+
+(with-eval-after-load 'evil
+  (evil-set-initial-state 'agentsmith-mode 'normal)
+  (evil-define-key* 'normal agentsmith-mode-map
+    "?"                  #'agentsmith-dispatch
+    "gr"                 #'agentsmith-buffer-refresh
+    "c"                  #'agentsmith-create-workspace
+    (kbd "RET")          #'agentsmith-open-at-point
+    (kbd "S-<return>")   #'agentsmith-agent-popup-at-point
+    "a"                  #'agentsmith-agent-at-point
+    "d"                  #'agentsmith-delete-at-point)
+  (add-hook 'agentsmith-mode-hook #'evil-normalize-keymaps))
 
 (provide 'agentsmith-buffer)
 ;;; agentsmith-buffer.el ends here
