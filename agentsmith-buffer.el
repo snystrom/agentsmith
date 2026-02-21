@@ -54,6 +54,25 @@ Override to customize behavior, e.g. for project.el integration."
   :type 'function
   :group 'agentsmith-buffer)
 
+(defcustom agentsmith-switch-to-existing-project-function
+  #'agentsmith--switch-to-existing-project-default
+  "Function to switch to an already-open project.
+Called with one argument: the project directory (with trailing slash).
+Should return non-nil if it successfully switched to the project,
+nil if the project is not already open.
+When this returns nil, `projectile-switch-project-action' is called
+instead to do a full project switch with file selection.
+
+Doom Emacs users who want workspace tab switching can set this to:
+
+  (lambda (dir)
+    (let ((name (file-name-nondirectory (directory-file-name dir))))
+      (when (+workspace-exists-p name)
+        (+workspace-switch name)
+        t)))"
+  :type 'function
+  :group 'agentsmith-buffer)
+
 ;;; Faces
 
 (defface agentsmith-workspace-heading
@@ -202,14 +221,24 @@ backend directly (detects externally-started agents)."
 ;;; Project Switching
 
 (declare-function projectile-add-known-project "projectile" (project-root))
+(declare-function projectile-project-buffers "projectile" ())
+
+(defun agentsmith--switch-to-existing-project-default (project-dir)
+  "Switch to PROJECT-DIR if it has open file-visiting buffers.
+Returns non-nil if switched, nil if no buffers found."
+  (let* ((projectile-project-root project-dir)
+         (bufs (cl-remove-if-not #'buffer-file-name
+                                 (projectile-project-buffers))))
+    (when bufs
+      (switch-to-buffer (car bufs))
+      t)))
 
 (defun agentsmith--switch-to-project (directory)
   "Switch to DIRECTORY, using its parent workspace as the projectile project.
-Sets `default-directory' to DIRECTORY so the file finder starts there,
-but registers the workspace root as the projectile project.  Falls back
-to DIRECTORY itself if no workspace is found.  Doom Emacs and other
-frameworks override `projectile-switch-project-action' to provide their
-own file-finding behavior."
+If the project is already open (has file-visiting buffers), switches to
+it via `agentsmith-switch-to-existing-project-function' instead of
+showing the file finder.  Falls back to `projectile-switch-project-action'
+for new projects."
   (let* ((dir (file-name-as-directory (expand-file-name directory)))
          (ws (agentsmith-workspace-find-by-directory dir))
          (project-dir (if ws
@@ -217,9 +246,10 @@ own file-finding behavior."
                            (agentsmith-workspace-directory ws))
                         dir)))
     (projectile-add-known-project project-dir)
-    (let ((projectile-project-root project-dir)
-          (default-directory dir))
-      (funcall projectile-switch-project-action))))
+    (let ((projectile-project-root project-dir))
+      (unless (funcall agentsmith-switch-to-existing-project-function project-dir)
+        (let ((default-directory dir))
+          (funcall projectile-switch-project-action))))))
 
 ;;; Default Open Functions
 

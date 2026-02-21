@@ -135,13 +135,15 @@ Add custom actions to the dispatch menu:
   '("x" "My custom action" my-custom-command))
 ```
 
+### Switching to already-open projects
+
+By default, if a project already has file-visiting buffers open, `RET` switches to the most recent buffer instead of showing the file finder. Customize this with `agentsmith-switch-to-existing-project-function` — it receives the project directory and should return non-nil if it handled the switch.
+
 ## Doom Emacs
 
 AgentSmith works with Doom Emacs out of the box. Doom overrides `projectile-switch-project-action` to use its own workspace/file selection system, so `RET` in the AgentSmith buffer will automatically use Doom's project switching behavior (e.g., `+ivy/projectile-find-file` or the vertico equivalent).
 
-If you use Doom's `ui/workspaces` module, switching to a project will also create/switch to the corresponding Doom workspace tab.
-
-No extra configuration is needed — AgentSmith delegates to projectile, and Doom configures projectile.
+If you use Doom's `ui/workspaces` module, you can configure AgentSmith to switch to existing workspace tabs instead of opening the file finder:
 
 ```elisp
 ;; Doom packages.el
@@ -151,5 +153,13 @@ No extra configuration is needed — AgentSmith delegates to projectile, and Doo
 ```elisp
 ;; Doom config.el
 (use-package! agentsmith
-  :commands (agentsmith agentsmith-workspace-list))
+  :commands (agentsmith agentsmith-workspace-list)
+  :config
+  ;; Switch to existing Doom workspace tab if open
+  (setq agentsmith-switch-to-existing-project-function
+        (lambda (dir)
+          (let ((name (file-name-nondirectory (directory-file-name dir))))
+            (when (+workspace-exists-p name)
+              (+workspace-switch name)
+              t)))))
 ```
