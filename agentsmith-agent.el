@@ -203,6 +203,7 @@ Returns a status symbol."
 ;;; Claude Code IDE Backend Helpers
 
 (declare-function claude-code-ide--get-buffer-name "claude-code-ide" (&optional directory))
+(declare-function claude-code-ide--get-process "claude-code-ide" (&optional directory))
 
 (defun agentsmith--claude-code-ide-start (directory)
   "Start or toggle a claude-code-ide session in DIRECTORY.
@@ -223,16 +224,33 @@ Uses `default-directory' which is set by the dispatch caller."
 
 (defun agentsmith--claude-code-ide-detect-buffer (directory)
   "Find the claude-code-ide buffer for DIRECTORY.
-Uses claude-code-ide's own buffer naming convention."
-  (let ((default-directory directory))
-    (when (fboundp 'claude-code-ide--get-buffer-name)
-      (get-buffer (claude-code-ide--get-buffer-name)))))
+Uses the process hash table (keyed by full path) for accurate lookup,
+falling back to buffer-name matching with directory verification."
+  (let ((dir (expand-file-name directory)))
+    ;; Primary: process table lookup (full-path keyed, no collisions)
+    (or (when (fboundp 'claude-code-ide--get-process)
+          (when-let* ((proc (claude-code-ide--get-process dir)))
+            (process-buffer proc)))
+        ;; Fallback: buffer name lookup with directory verification
+        (when (fboundp 'claude-code-ide--get-buffer-name)
+          (when-let* ((buf (get-buffer (claude-code-ide--get-buffer-name dir))))
+            ;; Verify this buffer's directory actually matches ours
+            (when (string= (expand-file-name
+                            (buffer-local-value 'default-directory buf))
+                           dir)
+              buf))))))
 
 (defun agentsmith--claude-code-ide-status (directory)
   "Return status of claude-code-ide in DIRECTORY."
-  (if-let* ((buf (agentsmith--claude-code-ide-detect-buffer directory)))
-      (if (get-buffer-process buf) 'ready 'stopped)
-    'stopped))
+  (let ((dir (expand-file-name directory)))
+    ;; Check process table directly for accurate status
+    (if (and (fboundp 'claude-code-ide--get-process)
+             (claude-code-ide--get-process dir))
+        'ready
+      ;; Fallback to buffer detection
+      (if-let* ((buf (agentsmith--claude-code-ide-detect-buffer dir)))
+          (if (get-buffer-process buf) 'ready 'stopped)
+        'stopped))))
 
 (provide 'agentsmith-agent)
 ;;; agentsmith-agent.el ends here
