@@ -221,11 +221,6 @@ Returns the new workspace struct."
     ;; Create directories
     (make-directory dir t)
     (make-directory plans-dir t)
-    ;; Create .projectile marker for projectile recognition
-    (let ((marker (expand-file-name ".projectile" dir)))
-      (unless (file-exists-p marker)
-        (with-temp-file marker
-          (insert ""))))
     ;; Save config and register
     (agentsmith-workspace-save ws)
     (agentsmith-workspace-register dir)

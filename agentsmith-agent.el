@@ -202,20 +202,31 @@ Returns a status symbol."
 
 ;;; Claude Code IDE Backend Helpers
 
+;; claude-code-ide keys its process hash table via `project-root', which
+;; returns paths WITH a trailing slash (e.g. "/path/repo-a/").  We must
+;; use `file-name-as-directory' when setting `default-directory' so that
+;; `project-current' resolves from the correct directory — without it,
+;; `file-name-directory' strips the last component and project detection
+;; starts from the PARENT directory.
+;;
+;; Functions are called WITHOUT args so they use their own
+;; `project-current'-based resolution via `claude-code-ide--get-working-directory',
+;; avoiding format mismatches with hash table keys.
+
 (declare-function claude-code-ide--get-buffer-name "claude-code-ide" (&optional directory))
 (declare-function claude-code-ide--get-process "claude-code-ide" (&optional directory))
 
 (defun agentsmith--claude-code-ide-start (directory)
   "Start or toggle a claude-code-ide session in DIRECTORY.
 Uses `default-directory' which is set by the dispatch caller."
-  (let ((default-directory directory))
+  (let ((default-directory (file-name-as-directory directory)))
     (if (fboundp 'claude-code-ide)
         (claude-code-ide)
       (user-error "claude-code-ide is not installed"))))
 
 (defun agentsmith--claude-code-ide-stop (directory)
   "Stop the claude-code-ide session in DIRECTORY."
-  (let ((default-directory directory))
+  (let ((default-directory (file-name-as-directory directory)))
     (if (fboundp 'claude-code-ide-stop)
         (condition-case nil
             (claude-code-ide-stop)
@@ -224,31 +235,24 @@ Uses `default-directory' which is set by the dispatch caller."
 
 (defun agentsmith--claude-code-ide-detect-buffer (directory)
   "Find the claude-code-ide buffer for DIRECTORY.
-Uses the process hash table (keyed by full path) for accurate lookup,
-falling back to buffer-name matching with directory verification."
-  (let ((dir (expand-file-name directory)))
-    ;; Primary: process table lookup (full-path keyed, no collisions)
+Calls claude-code-ide functions without args so they resolve via
+`project-current' using `default-directory' (set by the dispatch caller).
+This avoids trailing-slash mismatches with the process hash table."
+  (let ((default-directory (file-name-as-directory (expand-file-name directory))))
     (or (when (fboundp 'claude-code-ide--get-process)
-          (when-let* ((proc (claude-code-ide--get-process dir)))
+          (when-let* ((proc (claude-code-ide--get-process)))
             (process-buffer proc)))
-        ;; Fallback: buffer name lookup with directory verification
         (when (fboundp 'claude-code-ide--get-buffer-name)
-          (when-let* ((buf (get-buffer (claude-code-ide--get-buffer-name dir))))
-            ;; Verify this buffer's directory actually matches ours
-            (when (string= (expand-file-name
-                            (buffer-local-value 'default-directory buf))
-                           dir)
-              buf))))))
+          (get-buffer (claude-code-ide--get-buffer-name))))))
 
 (defun agentsmith--claude-code-ide-status (directory)
-  "Return status of claude-code-ide in DIRECTORY."
-  (let ((dir (expand-file-name directory)))
-    ;; Check process table directly for accurate status
+  "Return status of claude-code-ide in DIRECTORY.
+Uses `default-directory' for path resolution to match process table keys."
+  (let ((default-directory (file-name-as-directory (expand-file-name directory))))
     (if (and (fboundp 'claude-code-ide--get-process)
-             (claude-code-ide--get-process dir))
+             (claude-code-ide--get-process))
         'ready
-      ;; Fallback to buffer detection
-      (if-let* ((buf (agentsmith--claude-code-ide-detect-buffer dir)))
+      (if-let* ((buf (agentsmith--claude-code-ide-detect-buffer directory)))
           (if (get-buffer-process buf) 'ready 'stopped)
         'stopped))))
 
