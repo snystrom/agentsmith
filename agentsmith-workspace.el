@@ -307,11 +307,18 @@ Prompts for NAME and DIRECTORY."
 
 (defun agentsmith-workspace-find-by-directory (dir)
   "Find the registered workspace containing DIR.
-Returns the workspace struct or nil."
-  (let ((dir (expand-file-name dir)))
-    (cl-find-if (lambda (ws)
-                  (file-in-directory-p dir (agentsmith-workspace-directory ws)))
-                (agentsmith-workspace-load-all))))
+When multiple workspaces match, returns the one with the deepest
+\(most specific) directory path to avoid ambiguity."
+  (let ((dir (expand-file-name dir))
+        (best nil)
+        (best-len 0))
+    (dolist (ws (agentsmith-workspace-load-all))
+      (let ((ws-dir (agentsmith-workspace-directory ws)))
+        (when (and (file-in-directory-p dir ws-dir)
+                   (> (length ws-dir) best-len))
+          (setq best ws
+                best-len (length ws-dir)))))
+    best))
 
 (defun agentsmith-worktree-find-by-directory (dir)
   "Find the registered worktree containing DIR.

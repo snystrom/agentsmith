@@ -20,3 +20,8 @@ ex want something more like:
 
 * TODO popup buffer to select an agent in the workspace
 ** ex will list each worktree name & allow user to type / scroll and press enter to open the agent
+* TODO press o to open the workspace as a projectile tab (or goto it if it's already open)
+* TODO agensmith-workspace-list use an ibuffer or similar to view the agent workspaces so user can choose and visit one in its projectile workspace tab (similar to pressing o)
+* TODO toggle agent workspace / worktree to close buffer
+* TODO pressing RET on a worktree opens the find-file-in workspace interface
+** expose this as an agentsmith configurable, ex doom emacs users might want to register +ivy/projectile-find-file or similar rather than the normal projectile-find-file interface, etc.

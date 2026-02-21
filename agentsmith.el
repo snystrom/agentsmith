@@ -129,10 +129,13 @@ Can be called from any buffer."
 (defun agentsmith-workspace-open-agent ()
   "Open the agent for the workspace containing the current directory.
 Shows existing session or starts a new one.
-Can be called from any buffer."
+Can be called from any buffer.
+Tries worktree lookup first (more specific) to derive the workspace,
+falling back to direct workspace lookup."
   (interactive)
   (let* ((dir (expand-file-name default-directory))
-         (ws (agentsmith-workspace-find-by-directory dir)))
+         (ws (or (car (agentsmith-worktree-find-by-directory dir))
+                 (agentsmith-workspace-find-by-directory dir))))
     (unless ws
       (user-error "Current directory is not inside a registered workspace"))
     (agentsmith-agent-popup-for-workspace ws)))
