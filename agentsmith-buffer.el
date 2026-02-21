@@ -221,14 +221,17 @@ backend directly (detects externally-started agents)."
 ;;; Project Switching
 
 (declare-function projectile-add-known-project "projectile" (project-root))
-(declare-function projectile-project-buffers "projectile" ())
 
 (defun agentsmith--switch-to-existing-project-default (project-dir)
   "Switch to PROJECT-DIR if it has open file-visiting buffers.
-Returns non-nil if switched, nil if no buffers found."
-  (let* ((projectile-project-root project-dir)
-         (bufs (cl-remove-if-not #'buffer-file-name
-                                 (projectile-project-buffers))))
+Returns non-nil if switched, nil if no buffers found.
+Uses `file-in-directory-p' directly rather than projectile's buffer
+detection, which can return stale results due to project root caching."
+  (let ((bufs (cl-remove-if-not
+               (lambda (buf)
+                 (when-let* ((f (buffer-file-name buf)))
+                   (file-in-directory-p f project-dir)))
+               (buffer-list))))
     (when bufs
       (switch-to-buffer (car bufs))
       t)))
