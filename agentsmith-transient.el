@@ -38,7 +38,7 @@
   ["Workspace"
    ("c" "Create workspace"  agentsmith-create-workspace)
    ("o" "Open workspace"    agentsmith-workspace-open-interactive)
-   ("k" "Delete workspace"  agentsmith-workspace-delete-interactive)]
+   ("d" "Delete workspace"  agentsmith-workspace-delete-interactive)]
   ["Worktree"
    ("w" "Add worktree"      agentsmith-dispatch--add-worktree)
    ("W" "Remove worktree"   agentsmith-dispatch--remove-worktree)]

@@ -1,0 +1,14 @@
+#+title: Todo
+* TODO evil mode keybinds
+* TODO do not ask for branch name on worktree creation
+
+* TODO Pass an agent method configuration object rather than the funky hardcode claude-code-ide stuff in `agentsmith-agent.el` now
+ex want something more like:
+
+(agentsmith-config-alist
+'(
+ start-method '#claude-code-ide-start
+ stop-method '#claude-code-ide-stop
+))
+
+...etc

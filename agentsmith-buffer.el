@@ -99,7 +99,7 @@ Active when point is on a workspace heading."
   "RET"         #'agentsmith-workspace-open-at-point
   "a"           #'agentsmith-workspace-agent-at-point
   "w"           #'agentsmith-workspace-add-worktree-at-point
-  "k"           #'agentsmith-workspace-delete-at-point
+  "d"           #'agentsmith-workspace-delete-at-point
   "p"           #'agentsmith-workspace-plans-at-point)
 
 (defvar-keymap agentsmith-worktree-section-map
@@ -108,7 +108,7 @@ Active when point is on a worktree line."
   "RET"         #'agentsmith-worktree-open-at-point
   "S-<return>"  #'agentsmith-worktree-agent-popup-at-point
   "a"           #'agentsmith-worktree-agent-at-point
-  "k"           #'agentsmith-worktree-remove-at-point)
+  "d"           #'agentsmith-worktree-remove-at-point)
 
 ;;; Buffer State
 
@@ -323,30 +323,30 @@ Dispatches to the worktree agent transient if available."
 
 (defun agentsmith-workspace-add-worktree-interactive (workspace)
   "Interactively add a worktree to WORKSPACE.
-Prompts for repository path, worktree name, and branch."
+Prompts for repository path. Uses the workspace name as the VCS
+worktree/branch name automatically. The display name in the UI
+is derived from the repo basename for identification."
   (let* ((repo-path (read-directory-name "Repository path: "))
          (vcs (agentsmith-worktree-detect-vcs repo-path))
-         (repo-name (file-name-nondirectory (directory-file-name repo-path)))
-         (name (read-string "Worktree name: " repo-name))
-         (branch (read-string "Branch name: "
-                              (agentsmith-workspace-name workspace)))
-         (target-dir (expand-file-name name
+         (ws-name (agentsmith-workspace-name workspace))
+         (repo-basename (file-name-nondirectory (directory-file-name repo-path)))
+         (target-dir (expand-file-name repo-basename
                                        (agentsmith-workspace-directory workspace))))
     (unless vcs
       (user-error "No git or jj repository found at: %s" repo-path))
-    ;; Create the worktree on disk
-    (agentsmith-worktree-create vcs repo-path target-dir name branch)
+    ;; Create the worktree on disk -- use workspace name for VCS name/branch
+    (agentsmith-worktree-create vcs repo-path target-dir ws-name ws-name)
     ;; Build the struct and add to workspace
     (let ((wt (make-agentsmith-worktree
-               :name name
+               :name repo-basename
                :path target-dir
                :source-repo (expand-file-name repo-path)
                :vcs vcs
-               :branch branch)))
+               :branch ws-name)))
       (agentsmith-workspace-add-worktree workspace wt)
       (when (derived-mode-p 'agentsmith-mode)
         (agentsmith-buffer-refresh))
-      (message "Added worktree: %s (%s)" name vcs)
+      (message "Added worktree: %s (%s)" repo-basename vcs)
       wt)))
 
 ;;; Mode Definition
