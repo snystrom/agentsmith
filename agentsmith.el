@@ -140,5 +140,36 @@ falling back to direct workspace lookup."
       (user-error "Current directory is not inside a registered workspace"))
     (agentsmith-agent-popup-for-workspace ws)))
 
+;;;###autoload
+(defun agentsmith-workspace-select-worktree-agent ()
+  "Interactively select a worktree in the current workspace and open its agent.
+Lists all worktrees in the workspace containing `default-directory',
+then opens the agent for the selected worktree using the cascade logic
+\(show existing → autodetect → start new)."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (ws (or (car (agentsmith-worktree-find-by-directory dir))
+                 (agentsmith-workspace-find-by-directory dir))))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (let ((worktrees (agentsmith-workspace-worktrees ws)))
+      (unless worktrees
+        (user-error "Workspace '%s' has no worktrees"
+                    (agentsmith-workspace-name ws)))
+      (let* ((candidates
+              (mapcar (lambda (wt)
+                        (cons (format "%s  %s  %s"
+                                      (agentsmith-worktree-name wt)
+                                      (or (agentsmith-worktree-branch wt) "")
+                                      (abbreviate-file-name
+                                       (agentsmith-worktree-path wt)))
+                              wt))
+                      worktrees))
+             (choice (completing-read
+                      (format "Worktree [%s]: " (agentsmith-workspace-name ws))
+                      candidates nil t))
+             (wt (cdr (assoc choice candidates))))
+        (agentsmith-agent-popup-for-worktree wt)))))
+
 (provide 'agentsmith)
 ;;; agentsmith.el ends here
