@@ -303,5 +303,25 @@ Prompts for NAME and DIRECTORY."
       (make-directory plans-dir t))
     (dired plans-dir)))
 
+;;; Directory Lookup
+
+(defun agentsmith-workspace-find-by-directory (dir)
+  "Find the registered workspace containing DIR.
+Returns the workspace struct or nil."
+  (let ((dir (expand-file-name dir)))
+    (cl-find-if (lambda (ws)
+                  (file-in-directory-p dir (agentsmith-workspace-directory ws)))
+                (agentsmith-workspace-load-all))))
+
+(defun agentsmith-worktree-find-by-directory (dir)
+  "Find the registered worktree containing DIR.
+Returns a (WORKSPACE . WORKTREE) cons or nil."
+  (let ((dir (expand-file-name dir)))
+    (cl-block nil
+      (dolist (ws (agentsmith-workspace-load-all))
+        (dolist (wt (agentsmith-workspace-worktrees ws))
+          (when (file-in-directory-p dir (agentsmith-worktree-path wt))
+            (cl-return (cons ws wt))))))))
+
 (provide 'agentsmith-workspace)
 ;;; agentsmith-workspace.el ends here

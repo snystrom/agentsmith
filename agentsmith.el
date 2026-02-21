@@ -111,5 +111,31 @@ and displays the hierarchical workspace/worktree view."
       (unless (get-buffer-window agentsmith-buffer-name)
         (agentsmith)))))
 
+;;; Global Agent Commands
+
+;;;###autoload
+(defun agentsmith-worktree-open-agent ()
+  "Open the agent for the worktree containing the current directory.
+Cascades: show existing session → autodetect → start new agent.
+Can be called from any buffer."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (match (agentsmith-worktree-find-by-directory dir)))
+    (unless match
+      (user-error "Current directory is not inside a registered worktree"))
+    (agentsmith-agent-popup-for-worktree (cdr match))))
+
+;;;###autoload
+(defun agentsmith-workspace-open-agent ()
+  "Open the agent for the workspace containing the current directory.
+Shows existing session or starts a new one.
+Can be called from any buffer."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (ws (agentsmith-workspace-find-by-directory dir)))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (agentsmith-agent-popup-for-workspace ws)))
+
 (provide 'agentsmith)
 ;;; agentsmith.el ends here

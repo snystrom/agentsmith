@@ -290,23 +290,10 @@ Cascading behavior:
 3. Start a new agent with the default backend, then show its buffer"
   (interactive)
   (if-let* ((wt (agentsmith--worktree-at-point)))
-      (let ((session (agentsmith-worktree-agent-session wt)))
-        (cond
-         ;; 1. Existing tracked session
-         (session
-          (agentsmith-agent-show-buffer session))
-         ;; 2. Auto-detect externally started buffer
-         ((let ((buf (agentsmith-agent-detect-buffer-for-dir
-                      (agentsmith-worktree-path wt))))
-            (when (and buf (buffer-live-p buf))
-              (funcall agentsmith-agent-popup-function buf)
-              t)))
-         ;; 3. Nothing found — start a new agent and show it
-         (t
-          (let ((new-session (agentsmith-agent-start-for-worktree wt)))
-            (agentsmith-agent-show-buffer new-session)
-            (when (derived-mode-p 'agentsmith-mode)
-              (agentsmith-buffer-refresh))))))
+      (progn
+        (agentsmith-agent-popup-for-worktree wt)
+        (when (derived-mode-p 'agentsmith-mode)
+          (agentsmith-buffer-refresh)))
     (user-error "No worktree at point")))
 
 (defun agentsmith-worktree-agent-at-point ()
@@ -411,12 +398,9 @@ On a workspace, starts or shows the workspace agent."
    ((agentsmith--worktree-at-point) (agentsmith-worktree-agent-popup-at-point))
    ((agentsmith--workspace-at-point)
     (let ((ws (agentsmith--workspace-at-point)))
-      (if-let* ((session (agentsmith-workspace-agent-session ws)))
-          (agentsmith-agent-show-buffer session)
-        (let ((new-session (agentsmith-agent-start-for-workspace ws)))
-          (agentsmith-agent-show-buffer new-session)
-          (when (derived-mode-p 'agentsmith-mode)
-            (agentsmith-buffer-refresh))))))
+      (agentsmith-agent-popup-for-workspace ws)
+      (when (derived-mode-p 'agentsmith-mode)
+        (agentsmith-buffer-refresh))))
    (t (user-error "No workspace or worktree at point"))))
 
 ;;; Mode Definition

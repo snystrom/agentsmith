@@ -1,8 +1,10 @@
 #+title: Todo
-* TODO evil mode keybinds
-* TODO do not ask for branch name on worktree creation
+* DONE evil mode keybinds
+-
+* DONE do not ask for branch name on worktree creation. Also, when you create the worktree currently you are using the reponame as the worktree name. don't do that: instead use the workspace name as the worktree name!
+* TODO update enter behavior for the
 
-* TODO Pass an agent method configuration object rather than the funky hardcode claude-code-ide stuff in `agentsmith-agent.el` now
+* DONE Pass an agent method configuration object rather than the funky hardcode claude-code-ide stuff in `agentsmith-agent.el` now
 ex want something more like:
 
 (agentsmith-config-alist
@@ -12,3 +14,9 @@ ex want something more like:
 ))
 
 ...etc
+* TODO project agent management
+** agentsmith-open-workspace-agent
+** agentsmith-open-worktree-agent
+
+* TODO popup buffer to select an agent in the workspace
+** ex will list each worktree name & allow user to type / scroll and press enter to open the agent

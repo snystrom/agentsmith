@@ -200,6 +200,37 @@ Returns a status symbol."
         (agentsmith-agent--call backend 'status directory)
       (error 'stopped))))
 
+;;; Agent Popup Logic
+
+(defun agentsmith-agent-popup-for-worktree (worktree)
+  "Show/start agent for WORKTREE with cascading detection.
+1. Show existing tracked session buffer
+2. Auto-detect externally started agent buffer
+3. Start a new agent and show its buffer"
+  (let ((session (agentsmith-worktree-agent-session worktree)))
+    (cond
+     ;; 1. Existing tracked session
+     (session
+      (agentsmith-agent-show-buffer session))
+     ;; 2. Auto-detect externally started buffer
+     ((let ((buf (agentsmith-agent-detect-buffer-for-dir
+                  (agentsmith-worktree-path worktree))))
+        (when (and buf (buffer-live-p buf))
+          (funcall agentsmith-agent-popup-function buf)
+          t)))
+     ;; 3. Nothing found — start a new agent and show it
+     (t
+      (let ((new-session (agentsmith-agent-start-for-worktree worktree)))
+        (agentsmith-agent-show-buffer new-session))))))
+
+(defun agentsmith-agent-popup-for-workspace (workspace)
+  "Show/start agent for WORKSPACE.
+Shows existing session buffer or starts a new one."
+  (if-let* ((session (agentsmith-workspace-agent-session workspace)))
+      (agentsmith-agent-show-buffer session)
+    (let ((new-session (agentsmith-agent-start-for-workspace workspace)))
+      (agentsmith-agent-show-buffer new-session))))
+
 ;;; Claude Code IDE Backend Helpers
 
 ;; claude-code-ide keys its process hash table via `project-root', which
