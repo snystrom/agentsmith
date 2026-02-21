@@ -9,12 +9,22 @@
 
 ;;; Commentary:
 
-;; Pluggable agent backend protocol using cl-defgeneric.
-;; Users register new backends by:
-;;   1. Adding to `agentsmith-agent-backends'
-;;   2. Defining cl-defmethod implementations for the four generic functions
+;; Config-based agent backend registry.  Each backend is an entry in
+;; `agentsmith-agent-configs' mapping operation symbols to functions.
 ;;
-;; Ships with a `claude-code-ide' backend.
+;; To register a new backend:
+;;
+;;   (push '(my-backend
+;;           (name          . "My Agent")
+;;           (start         . my-agent-start)     ; fn(directory)
+;;           (stop          . my-agent-stop)       ; fn(directory)
+;;           (open          . my-agent-open)       ; fn(directory)
+;;           (detect-buffer . my-agent-find-buf)   ; fn(directory) -> buffer|nil
+;;           (status        . my-agent-status))    ; fn(directory) -> symbol
+;;         agentsmith-agent-configs)
+;;
+;; All operation functions take a single DIRECTORY argument.
+;; Ships with a `claude-code-ide' config.
 
 ;;; Code:
 
@@ -40,42 +50,52 @@ Users can customize this to control window placement and sizing."
   :type 'function
   :group 'agentsmith-agent)
 
-;;; Backend Registry
+;;; Config Registry
 
-(defvar agentsmith-agent-backends
-  '((claude-code-ide . "Claude Code IDE"))
-  "Alist of registered agent backends.
-Each entry is (SYMBOL . DESCRIPTION).
-Users and packages add entries here to make backends available.
+(defvar agentsmith-agent-configs
+  `((claude-code-ide
+     (name          . "Claude Code IDE")
+     (start         . agentsmith--claude-code-ide-start)
+     (stop          . agentsmith--claude-code-ide-stop)
+     (open          . agentsmith--claude-code-ide-start)  ; same fn — it toggles
+     (detect-buffer . agentsmith--claude-code-ide-detect-buffer)
+     (status        . agentsmith--claude-code-ide-status)))
+  "Alist of agent backend configurations.
+Each entry is (BACKEND-SYMBOL . CONFIG-ALIST).
 
-To register a new backend:
-  (push \\='(my-backend . \"My Backend\") agentsmith-agent-backends)
-Then define cl-defmethod implementations for:
-  `agentsmith-agent-start', `agentsmith-agent-stop',
-  `agentsmith-agent-status', `agentsmith-agent-get-buffer'")
+CONFIG-ALIST maps operation symbols to functions.  All operation
+functions take a single DIRECTORY argument (the worktree or workspace
+path).  This keeps configs decoupled from agentsmith internals.
 
-;;; Generic Protocol
+Required operations:
+  name          - string, display name for the backend
+  start         - fn(directory), start the agent in DIRECTORY
+  stop          - fn(directory), stop the agent in DIRECTORY
+  open          - fn(directory), open/focus agent for DIRECTORY
+  detect-buffer - fn(directory) -> buffer-or-nil, find existing agent buffer
+  status        - fn(directory) -> symbol, one of \\='stopped \\='ready \\='thinking")
 
-(cl-defgeneric agentsmith-agent-start (backend session)
-  "Start an agent process for SESSION using BACKEND.
-BACKEND is a symbol identifying the backend.
-SESSION is an `agentsmith-agent-session' struct.
-Implementations must set the session's `buffer' and `status' slots.
-Returns the session.")
+;;; Config Lookup
 
-(cl-defgeneric agentsmith-agent-stop (backend session)
-  "Stop the agent process for SESSION using BACKEND.
-Should kill or disconnect the process and set status to \\='stopped.")
+(defun agentsmith-agent--get-config (backend)
+  "Return the config alist for BACKEND, or error if not found."
+  (or (alist-get backend agentsmith-agent-configs)
+      (error "Unknown agent backend: %s" backend)))
 
-(cl-defgeneric agentsmith-agent-status (backend session)
-  "Return the current status symbol for SESSION.
-Returns one of: \\='stopped, \\='ready, or \\='thinking.
-BACKEND is a symbol identifying the backend.")
+(defun agentsmith-agent--call (backend op directory)
+  "Call operation OP for BACKEND in DIRECTORY.
+OP is a symbol (start, stop, open, detect-buffer, status).
+DIRECTORY is the working directory for the operation."
+  (let* ((config (agentsmith-agent--get-config backend))
+         (fn (alist-get op config)))
+    (unless fn
+      (error "Backend %s does not support operation: %s" backend op))
+    (let ((default-directory (expand-file-name directory)))
+      (funcall fn default-directory))))
 
-(cl-defgeneric agentsmith-agent-get-buffer (backend session)
-  "Return the buffer displaying the agent for SESSION.
-BACKEND is a symbol identifying the backend.
-Used to pop up the agent view.")
+(defun agentsmith-agent--config-name (backend)
+  "Return the display name for BACKEND."
+  (alist-get 'name (agentsmith-agent--get-config backend)))
 
 ;;; Default Popup Display
 
@@ -89,38 +109,51 @@ Used to pop up the agent view.")
 ;;; Convenience Functions
 
 (defun agentsmith-agent--read-backend ()
-  "Prompt user to select an agent backend. Returns the backend symbol."
+  "Prompt user to select an agent backend.  Returns the backend symbol."
   (let* ((choices (mapcar (lambda (entry)
-                            (cons (format "%s (%s)" (car entry) (cdr entry))
-                                  (car entry)))
-                          agentsmith-agent-backends))
+                            (let ((sym (car entry))
+                                  (name (alist-get 'name (cdr entry))))
+                              (cons (format "%s (%s)" sym (or name ""))
+                                    sym)))
+                          agentsmith-agent-configs))
          (choice (completing-read "Agent backend: " choices nil t)))
     (cdr (assoc choice choices))))
 
 (defun agentsmith-agent-start-for-worktree (worktree &optional backend)
   "Start an agent session for WORKTREE.
 BACKEND defaults to `agentsmith-default-agent-backend'.
-Sets the agent-session slot on WORKTREE. Returns the session."
+Sets the agent-session slot on WORKTREE.  Returns the session."
   (let* ((backend (or backend agentsmith-default-agent-backend))
+         (dir (agentsmith-worktree-path worktree))
          (session (make-agentsmith-agent-session
                    :backend backend
                    :status 'stopped
-                   :worktree-path (agentsmith-worktree-path worktree))))
-    (agentsmith-agent-start backend session)
+                   :worktree-path dir)))
+    (agentsmith-agent--call backend 'start dir)
+    ;; Detect the buffer the start function created
+    (setf (agentsmith-agent-session-buffer session)
+          (agentsmith-agent--call backend 'detect-buffer dir))
+    (setf (agentsmith-agent-session-status session)
+          (agentsmith-agent--call backend 'status dir))
     (setf (agentsmith-worktree-agent-session worktree) session)
     session))
 
 (defun agentsmith-agent-start-for-workspace (workspace &optional backend)
   "Start a top-level agent session for WORKSPACE.
 BACKEND defaults to the workspace's `default-agent-backend'.
-Sets the agent-session slot on WORKSPACE. Returns the session."
+Sets the agent-session slot on WORKSPACE.  Returns the session."
   (let* ((backend (or backend
                       (agentsmith-workspace-default-agent-backend workspace)))
+         (dir (agentsmith-workspace-directory workspace))
          (session (make-agentsmith-agent-session
                    :backend backend
                    :status 'stopped
-                   :worktree-path (agentsmith-workspace-directory workspace))))
-    (agentsmith-agent-start backend session)
+                   :worktree-path dir)))
+    (agentsmith-agent--call backend 'start dir)
+    (setf (agentsmith-agent-session-buffer session)
+          (agentsmith-agent--call backend 'detect-buffer dir))
+    (setf (agentsmith-agent-session-status session)
+          (agentsmith-agent--call backend 'status dir))
     (setf (agentsmith-workspace-agent-session workspace) session)
     session))
 
@@ -128,65 +161,78 @@ Sets the agent-session slot on WORKSPACE. Returns the session."
   "Stop the agent SESSION if it is running."
   (when (and session
              (not (eq (agentsmith-agent-session-status session) 'stopped)))
-    (agentsmith-agent-stop (agentsmith-agent-session-backend session) session)))
+    (agentsmith-agent--call (agentsmith-agent-session-backend session)
+                            'stop
+                            (agentsmith-agent-session-worktree-path session))
+    (setf (agentsmith-agent-session-status session) 'stopped)
+    (setf (agentsmith-agent-session-buffer session) nil)))
 
 (defun agentsmith-agent-show-buffer (session)
   "Display the agent buffer for SESSION using `agentsmith-agent-popup-function'."
-  (when-let* ((buf (agentsmith-agent-get-buffer
-                    (agentsmith-agent-session-backend session) session)))
-    (if (buffer-live-p buf)
-        (funcall agentsmith-agent-popup-function buf)
-      (user-error "Agent buffer no longer exists"))))
-
-;;; Claude Code IDE Backend
-
-;; Declare external functions to avoid byte-compile warnings
-(declare-function claude-code-ide "claude-code-ide" ())
-(declare-function claude-code-ide-stop "claude-code-ide" ())
-(declare-function claude-code-ide-switch-to-buffer "claude-code-ide" ())
-
-(cl-defmethod agentsmith-agent-start ((_backend (eql claude-code-ide)) session)
-  "Start a claude-code-ide session.
-Uses `default-directory' to determine the project context."
-  (let ((default-directory (agentsmith-agent-session-worktree-path session)))
-    ;; claude-code-ide uses default-directory to determine the project
-    (claude-code-ide)
-    ;; Try to find the buffer it created
-    ;; claude-code-ide names buffers based on the project directory
-    (let ((buf (seq-find
-                (lambda (b)
-                  (and (string-match-p "\\*claude-code" (buffer-name b))
-                       (with-current-buffer b
-                         (string= (expand-file-name default-directory)
-                                  (expand-file-name
-                                   (agentsmith-agent-session-worktree-path session))))))
-                (buffer-list))))
-      (setf (agentsmith-agent-session-buffer session) buf)
-      (setf (agentsmith-agent-session-status session) 'ready)))
-  session)
-
-(cl-defmethod agentsmith-agent-stop ((_backend (eql claude-code-ide)) session)
-  "Stop a claude-code-ide session."
-  (let ((default-directory (agentsmith-agent-session-worktree-path session)))
-    (condition-case nil
-        (claude-code-ide-stop)
-      (error nil)))
-  (setf (agentsmith-agent-session-status session) 'stopped)
-  (setf (agentsmith-agent-session-buffer session) nil))
-
-(cl-defmethod agentsmith-agent-status ((_backend (eql claude-code-ide)) session)
-  "Check claude-code-ide session status.
-For v1, checks if the buffer and its process are alive."
-  (let ((buf (agentsmith-agent-session-buffer session)))
+  (let* ((backend (agentsmith-agent-session-backend session))
+         (dir (agentsmith-agent-session-worktree-path session))
+         (buf (or (let ((b (agentsmith-agent-session-buffer session)))
+                    (and b (buffer-live-p b) b))
+                  ;; Re-detect in case buffer was recreated or not tracked
+                  (agentsmith-agent--call backend 'detect-buffer dir))))
+    ;; Update the session's buffer slot
+    (when buf
+      (setf (agentsmith-agent-session-buffer session) buf))
     (if (and buf (buffer-live-p buf))
-        (if (get-buffer-process buf)
-            'ready
-          'stopped)
-      'stopped)))
+        (funcall agentsmith-agent-popup-function buf)
+      (user-error "No agent buffer found"))))
 
-(cl-defmethod agentsmith-agent-get-buffer ((_backend (eql claude-code-ide)) session)
-  "Return the claude-code-ide buffer for SESSION."
-  (agentsmith-agent-session-buffer session))
+(defun agentsmith-agent-detect-buffer-for-dir (directory &optional backend)
+  "Try to detect an existing agent buffer for DIRECTORY.
+Uses BACKEND (defaults to `agentsmith-default-agent-backend').
+Returns the buffer or nil."
+  (let ((backend (or backend agentsmith-default-agent-backend)))
+    (condition-case nil
+        (agentsmith-agent--call backend 'detect-buffer directory)
+      (error nil))))
+
+(defun agentsmith-agent-status-for-dir (directory &optional backend)
+  "Get agent status for DIRECTORY without requiring a session struct.
+Uses BACKEND (defaults to `agentsmith-default-agent-backend').
+Returns a status symbol."
+  (let ((backend (or backend agentsmith-default-agent-backend)))
+    (condition-case nil
+        (agentsmith-agent--call backend 'status directory)
+      (error 'stopped))))
+
+;;; Claude Code IDE Backend Helpers
+
+(declare-function claude-code-ide--get-buffer-name "claude-code-ide" (&optional directory))
+
+(defun agentsmith--claude-code-ide-start (directory)
+  "Start or toggle a claude-code-ide session in DIRECTORY.
+Uses `default-directory' which is set by the dispatch caller."
+  (let ((default-directory directory))
+    (if (fboundp 'claude-code-ide)
+        (claude-code-ide)
+      (user-error "claude-code-ide is not installed"))))
+
+(defun agentsmith--claude-code-ide-stop (directory)
+  "Stop the claude-code-ide session in DIRECTORY."
+  (let ((default-directory directory))
+    (if (fboundp 'claude-code-ide-stop)
+        (condition-case nil
+            (claude-code-ide-stop)
+          (error nil))
+      (user-error "claude-code-ide is not installed"))))
+
+(defun agentsmith--claude-code-ide-detect-buffer (directory)
+  "Find the claude-code-ide buffer for DIRECTORY.
+Uses claude-code-ide's own buffer naming convention."
+  (let ((default-directory directory))
+    (when (fboundp 'claude-code-ide--get-buffer-name)
+      (get-buffer (claude-code-ide--get-buffer-name)))))
+
+(defun agentsmith--claude-code-ide-status (directory)
+  "Return status of claude-code-ide in DIRECTORY."
+  (if-let* ((buf (agentsmith--claude-code-ide-detect-buffer directory)))
+      (if (get-buffer-process buf) 'ready 'stopped)
+    'stopped))
 
 (provide 'agentsmith-agent)
 ;;; agentsmith-agent.el ends here

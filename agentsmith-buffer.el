@@ -123,13 +123,18 @@ Active when point is on a worktree line."
                          '("??" . font-lock-warning-face))))
     (propertize (format "[%s]" (car spec)) 'face (cdr spec))))
 
-(defun agentsmith--get-agent-status (agent-session)
-  "Get the current status of AGENT-SESSION, or \\='stopped if nil."
-  (if agent-session
-      (agentsmith-agent-status
-       (agentsmith-agent-session-backend agent-session)
-       agent-session)
-    'stopped))
+(defun agentsmith--get-agent-status (agent-session &optional directory)
+  "Get the current status of AGENT-SESSION, or query backend for DIRECTORY.
+If AGENT-SESSION is nil but DIRECTORY is provided, queries the default
+backend directly (detects externally-started agents)."
+  (cond
+   (agent-session
+    (agentsmith-agent-status-for-dir
+     (agentsmith-agent-session-worktree-path agent-session)
+     (agentsmith-agent-session-backend agent-session)))
+   (directory
+    (agentsmith-agent-status-for-dir directory))
+   (t 'stopped)))
 
 ;;; Section Rendering
 
@@ -157,7 +162,8 @@ Active when point is on a worktree line."
   (let* ((name (agentsmith-workspace-name workspace))
          (dir (abbreviate-file-name (agentsmith-workspace-directory workspace)))
          (agent (agentsmith-workspace-agent-session workspace))
-         (status (agentsmith--get-agent-status agent)))
+         (status (agentsmith--get-agent-status
+                  agent (agentsmith-workspace-directory workspace))))
     (magit-insert-section (agentsmith-workspace-section workspace t)
       (magit-insert-heading
         (format "%s %s  %s\n"
@@ -179,7 +185,8 @@ Active when point is on a worktree line."
   (let* ((name (agentsmith-worktree-name worktree))
          (path (abbreviate-file-name (agentsmith-worktree-path worktree)))
          (agent (agentsmith-worktree-agent-session worktree))
-         (status (agentsmith--get-agent-status agent))
+         (status (agentsmith--get-agent-status
+                  agent (agentsmith-worktree-path worktree)))
          (branch (or (agentsmith-worktree-branch worktree) "")))
     (magit-insert-section (agentsmith-worktree-section worktree)
       (magit-insert-heading
@@ -276,12 +283,20 @@ otherwise starts an agent directly."
     (user-error "No worktree at point")))
 
 (defun agentsmith-worktree-agent-popup-at-point ()
-  "Show the agent buffer for the worktree at point in a popup."
+  "Show the agent buffer for the worktree at point in a popup.
+If no agentsmith session exists, tries to auto-detect an externally
+started agent via the default backend's detect-buffer."
   (interactive)
   (if-let* ((wt (agentsmith--worktree-at-point)))
-      (if-let* ((session (agentsmith-worktree-agent-session wt)))
-          (agentsmith-agent-show-buffer session)
-        (user-error "No agent running for this worktree"))
+      (let ((session (agentsmith-worktree-agent-session wt)))
+        (if session
+            (agentsmith-agent-show-buffer session)
+          ;; Auto-detect: try finding an existing buffer via default backend
+          (let ((buf (agentsmith-agent-detect-buffer-for-dir
+                      (agentsmith-worktree-path wt))))
+            (if (and buf (buffer-live-p buf))
+                (funcall agentsmith-agent-popup-function buf)
+              (user-error "No agent running for this worktree")))))
     (user-error "No worktree at point")))
 
 (defun agentsmith-worktree-agent-at-point ()
