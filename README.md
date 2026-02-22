@@ -8,6 +8,16 @@ Emacs major mode for managing coding agent workflows across multiple projects an
 
 AgentSmith is born out of frustration coordinating cross-repo features with coding agents. 
 
+I often work on features that require coordinated changes across repos. Usually I do this by making a new project with a worktree for each repo in scope for a feature. I'll launch 1 agent scoped to the whole project, let it cook, then drop into each worktree to review code, polish things up, or launch another agent with worktree scope to help with any of this. I find it works pretty well, but often get into clunky spots setting up the structure, and once configured, have to do stupid things to pop open the correct agent buffer. Finally, I don't like being locked into a single agent platform. I use `claude-code-ide` as my daily driver for now, but want to have a consistent interface for alternative platforms should I choose to switch, or give myself the option to use different agents at different times, etc.
+
+AgentSmith is designed to help with each of these issues:
+- Automatic workspace & worktree creation
+- Management of agents at the workspace and worktree level
+- Helpers for swapping agent sessions within and between workspaces
+- AgentSmith allows registration of custom agent backends so each can be managed with the same helpers
+
+### Workspaces & Worktrees
+
 AgentSmith bundles git/jj worktrees from multiple repos into **workspaces**, each with its own agent sessions. The main buffer displays a hierarchical view:
 
 ```
@@ -16,7 +26,13 @@ AgentSmith bundles git/jj worktrees from multiple repos into **workspaces**, eac
     [OK] repo-b  feature-branch  ~/workspaces/my-workspace/repo-b/
 ```
 
-Status indicators show agent state: `[OK]` ready, `[..]` thinking, `[--]` stopped.
+Status indicators show agent state: `[OK]` ready, `[..]` thinking, `[--]` stopped. this actually doesn't work very well because the buffer doesn't auto-refresh, sorry. Eventually I'd like to get agent hooks working so live monitoring status is more seamless.
+
+To create a workspace, users select a series of target repos, and AgentSmith automatically creates a git or jj worktree for you.
+
+## Below is mostly correct AI slop
+
+I'll get this moved into the agent config soon and replaced with actually useful docs.
 
 ## Requirements
 
