@@ -10,7 +10,7 @@ AgentSmith is born out of frustration coordinating cross-repo features with codi
 
 I often work on features that require coordinated changes across repos. Usually I do this by making a new project with a worktree for each repo in scope for a feature. I'll launch 1 agent scoped to the whole project, let it cook, then drop into each worktree to review code, polish things up, or launch another agent with worktree scope to help with any of this. I find it works pretty well, but often get into clunky spots setting up the structure, and once configured, have to do stupid things to pop open the correct agent buffer. Finally, I don't like being locked into a single agent platform. I use `claude-code-ide` as my daily driver for now, but want to have a consistent interface for alternative platforms should I choose to switch, or give myself the option to use different agents at different times, etc.
 
-More broadly, this also changes a bit how I want to work in my editor: I really want a "projectile" type interface for workspaces rather than repos.
+More broadly, this also changes a bit how I want to work in my editor: I really want a "projectile" type interface for multi-repo workspaces rather than individual repos.
 
 AgentSmith is designed to help with each of these issues:
 - Automatic workspace & worktree creation
