@@ -1,8 +1,12 @@
 # AgentSmith
 
+> We're not here because we're free... we're here because we're *not* free. There's no escaping reason, no denying purpose, because, as we both know, without purpose, we would not exist.
+
 Emacs major mode for managing coding agent workflows across multiple projects and repositories.
 
 ## Overview
+
+AgentSmith is born out of frustration coordinating cross-repo features with coding agents. 
 
 AgentSmith bundles git/jj worktrees from multiple repos into **workspaces**, each with its own agent sessions. The main buffer displays a hierarchical view:
 
@@ -37,6 +41,13 @@ With `use-package` and `straight.el`:
 (use-package agentsmith
   :straight (:host github :repo "snystrom/agentsmith")
   :commands (agentsmith agentsmith-workspace-list))
+```
+
+Doom Emacs
+
+```elisp
+;; Doom packages.el
+(package! agentsmith :recipe (:host github :repo "snystrom/agentsmith"))
 ```
 
 ## Usage
@@ -144,11 +155,6 @@ By default, if a project already has file-visiting buffers open, `RET` switches 
 AgentSmith works with Doom Emacs out of the box. Doom overrides `projectile-switch-project-action` to use its own workspace/file selection system, so `RET` in the AgentSmith buffer will automatically use Doom's project switching behavior (e.g., `+ivy/projectile-find-file` or the vertico equivalent).
 
 If you use Doom's `ui/workspaces` module, you can configure AgentSmith to switch to existing workspace tabs instead of opening the file finder:
-
-```elisp
-;; Doom packages.el
-(package! agentsmith :recipe (:host github :repo "snystrom/agentsmith"))
-```
 
 ```elisp
 ;; Doom config.el
