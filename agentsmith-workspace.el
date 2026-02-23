@@ -299,6 +299,17 @@ Prompts for NAME and DIRECTORY."
 
 (declare-function agentsmith-worktree-detect-vcs "agentsmith-worktree" (repo-path))
 (declare-function agentsmith-worktree-branch-info "agentsmith-worktree" (vcs worktree-path))
+(declare-function agentsmith-buffer-refresh "agentsmith-buffer" (&optional _ignore-auto _noconfirm))
+(defvar agentsmith-buffer-name)
+(defvar agentsmith--workspaces)
+
+(defun agentsmith-workspace--refresh-buffer (workspace)
+  "Add WORKSPACE to the buffer state and refresh if the buffer exists."
+  (when-let* ((buf (and (boundp 'agentsmith-buffer-name)
+                        (get-buffer agentsmith-buffer-name))))
+    (with-current-buffer buf
+      (push workspace agentsmith--workspaces)
+      (agentsmith-buffer-refresh))))
 
 (defun agentsmith-workspace-import (name directory)
   "Import an existing directory as an agentsmith workspace.
@@ -319,6 +330,7 @@ Imported workspaces get metadata (:imported t)."
           (agentsmith-workspace-register dir)
           (when (fboundp 'projectile-add-known-project)
             (projectile-add-known-project dir))
+          (agentsmith-workspace--refresh-buffer ws)
           (message "Re-registered workspace: %s" (agentsmith-workspace-name ws))
           ws)
       ;; Scan subdirectories for repos
@@ -346,6 +358,7 @@ Imported workspaces get metadata (:imported t)."
           (agentsmith-workspace-register dir)
           (when (fboundp 'projectile-add-known-project)
             (projectile-add-known-project dir))
+          (agentsmith-workspace--refresh-buffer ws)
           (message "Imported workspace: %s (%d repos found)"
                    name (length worktrees))
           ws)))))
