@@ -50,6 +50,16 @@ Users can customize this to control window placement and sizing."
   :type 'function
   :group 'agentsmith-agent)
 
+(defcustom agentsmith-agent-toggle-outside-workspace
+  #'agentsmith-agent-toggle-for-directory
+  "Function called to toggle an agent outside a registered workspace.
+Called with a single DIRECTORY argument.  The default launches the
+default agent backend for the directory.  Set to
+`agentsmith-agent-toggle-outside-workspace-error' to restore the
+previous behavior of signaling an error."
+  :type 'function
+  :group 'agentsmith-agent)
+
 ;;; Config Registry
 
 (defvar agentsmith-agent-configs
@@ -242,6 +252,33 @@ Shows existing session buffer or starts a new one."
       (agentsmith-agent-show-buffer session)
     (let ((new-session (agentsmith-agent-start-for-workspace workspace)))
       (agentsmith-agent-show-buffer new-session))))
+
+;;; Directory-based Agent Toggle (outside workspace)
+
+(defun agentsmith-agent-popup-for-directory (directory &optional backend)
+  "Show/start agent for DIRECTORY using cascading detection.
+BACKEND defaults to `agentsmith-default-agent-backend'.
+Used as fallback when DIRECTORY is not inside a registered workspace."
+  (let ((backend (or backend agentsmith-default-agent-backend)))
+    (if-let* ((buf (agentsmith-agent-detect-buffer-for-dir directory backend))
+              (_live (buffer-live-p buf)))
+        (funcall agentsmith-agent-popup-function buf)
+      ;; No existing buffer — start the agent
+      (agentsmith-agent--call backend 'start directory)
+      (when-let* ((buf (agentsmith-agent--call backend 'detect-buffer directory)))
+        (funcall agentsmith-agent-popup-function buf)))))
+
+(defun agentsmith-agent-toggle-for-directory (directory)
+  "Toggle agent for DIRECTORY using the default backend.
+If the agent buffer is visible, hide it.  Otherwise show or start it."
+  (let ((result (agentsmith-agent-toggle-buffer directory)))
+    (when (or result
+              (not (agentsmith-agent-detect-buffer-for-dir directory)))
+      (agentsmith-agent-popup-for-directory directory))))
+
+(defun agentsmith-agent-toggle-outside-workspace-error (_directory)
+  "Signal an error indicating the directory is not in a registered worktree."
+  (user-error "Current directory is not inside a registered worktree"))
 
 ;;; Claude Code IDE Backend Helpers
 
