@@ -260,5 +260,34 @@ switches to the selected one via `projectile-switch-project-action'."
            (ws (cdr (assoc choice candidates))))
       (agentsmith--switch-to-project (agentsmith-workspace-directory ws)))))
 
+;;;###autoload
+(defun agentsmith-worktree-list ()
+  "Select a worktree in the current workspace and switch to it.
+Uses `completing-read' to list all worktrees, then switches to
+the selected one via `agentsmith--switch-to-project'."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (ws (or (car (agentsmith-worktree-find-by-directory dir))
+                 (agentsmith-workspace-find-by-directory dir))))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (let ((worktrees (agentsmith-workspace-worktrees ws)))
+      (unless worktrees
+        (user-error "Workspace '%s' has no worktrees"
+                    (agentsmith-workspace-name ws)))
+      (let* ((candidates
+              (mapcar (lambda (wt)
+                        (cons (format "%s  %s"
+                                      (agentsmith-worktree-name wt)
+                                      (abbreviate-file-name
+                                       (agentsmith-worktree-path wt)))
+                              wt))
+                      worktrees))
+             (choice (completing-read
+                      (format "Worktree [%s]: " (agentsmith-workspace-name ws))
+                      candidates nil t))
+             (wt (cdr (assoc choice candidates))))
+        (agentsmith--switch-to-project (agentsmith-worktree-path wt))))))
+
 (provide 'agentsmith)
 ;;; agentsmith.el ends here
