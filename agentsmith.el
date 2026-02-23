@@ -293,5 +293,19 @@ Uses `completing-read' to list all worktrees, then opens
           (projectile-add-known-project wt-dir)
           (funcall projectile-switch-project-action))))))
 
+;;;###autoload
+(defun agentsmith-workspace-switch-buffer ()
+  "Switch to a buffer belonging to the current workspace.
+Calls `projectile-switch-to-buffer' scoped to the workspace directory."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (ws (or (car (agentsmith-worktree-find-by-directory dir))
+                 (agentsmith-workspace-find-by-directory dir))))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (let ((projectile-project-root
+           (file-name-as-directory (agentsmith-workspace-directory ws))))
+      (projectile-switch-to-buffer))))
+
 (provide 'agentsmith)
 ;;; agentsmith.el ends here
