@@ -76,7 +76,12 @@ Doom Emacs's `ui/workspaces' module."
     (when (and (fboundp '+workspace-exists-p)
                (+workspace-exists-p name))
       (+workspace-switch name)
-      t)))
+      ;; Return nil if no file-visiting buffers exist, so the caller
+      ;; falls through to projectile-switch-project-action for file selection.
+      (cl-some (lambda (buf)
+                 (when-let* ((f (buffer-file-name buf)))
+                   (file-in-directory-p f dir)))
+               (buffer-list)))))
 
 ;;; Faces
 
