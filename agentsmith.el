@@ -175,6 +175,39 @@ If the agent buffer is visible, hide it.  Otherwise show or start it."
                       (agentsmith-workspace-directory ws))))
         (agentsmith-agent-popup-for-workspace ws)))))
 
+(defun agentsmith--select-visible-agent-window (directory)
+  "Select the window displaying an agent buffer for DIRECTORY, if any."
+  (when-let* ((buf (agentsmith-agent-detect-buffer-for-dir
+                    (expand-file-name directory)))
+              (win (get-buffer-window buf t)))
+    (select-window win)))
+
+;;;###autoload
+(defun agentsmith-worktree-toggle-agent-and-go ()
+  "Like `agentsmith-worktree-toggle-agent' but select the agent window."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (match (agentsmith-worktree-find-by-directory dir)))
+    (if match
+        (progn
+          (agentsmith-worktree-toggle-agent)
+          (agentsmith--select-visible-agent-window
+           (agentsmith-worktree-path (cdr match))))
+      (funcall agentsmith-agent-toggle-outside-workspace-and-go dir))))
+
+;;;###autoload
+(defun agentsmith-workspace-toggle-agent-and-go ()
+  "Like `agentsmith-workspace-toggle-agent' but select the agent window."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (ws (or (car (agentsmith-worktree-find-by-directory dir))
+                 (agentsmith-workspace-find-by-directory dir))))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (agentsmith-workspace-toggle-agent)
+    (agentsmith--select-visible-agent-window
+     (agentsmith-workspace-directory ws))))
+
 ;;;###autoload
 (defun agentsmith-workspace-select-worktree-agent ()
   "Interactively select a worktree in the current workspace and open its agent.

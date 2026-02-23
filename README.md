@@ -77,6 +77,10 @@ Doom Emacs
 | `M-x agentsmith-workspace-list` | Select a workspace and switch to it |
 | `M-x agentsmith-worktree-open-agent` | Open agent for the current worktree (from any buffer) |
 | `M-x agentsmith-workspace-open-agent` | Open agent for the current workspace (from any buffer) |
+| `M-x agentsmith-worktree-toggle-agent` | Toggle agent popup for the current worktree (works outside workspaces too) |
+| `M-x agentsmith-worktree-toggle-agent-and-go` | Toggle agent popup and move cursor into it |
+| `M-x agentsmith-workspace-toggle-agent` | Toggle agent popup for the current workspace |
+| `M-x agentsmith-workspace-toggle-agent-and-go` | Toggle agent popup for workspace and move cursor into it |
 | `M-x agentsmith-workspace-select-worktree-agent` | Select a worktree in the current workspace and open its agent |
 
 ## Keybindings
@@ -138,6 +142,25 @@ Control how agent buffers are displayed:
                         '((display-buffer-in-side-window)
                           (side . bottom)
                           (window-height . 0.3)))))
+```
+
+### Using toggle commands outside workspaces
+
+By default, `agentsmith-worktree-toggle-agent` (and the `-and-go` variant) work as a generic agent launcher in any project — not just inside registered workspaces. This makes them useful as global keybindings for your agent backend.
+
+```elisp
+;; Example: bind toggle-and-go globally
+(keymap-global-set "C-c a" #'agentsmith-worktree-toggle-agent-and-go)
+```
+
+The fallback behavior is controlled by function-valued defcustoms, so you can customize or disable it:
+
+```elisp
+;; Disable: error when not in a workspace (old behavior)
+(setq agentsmith-agent-toggle-outside-workspace
+      #'agentsmith-agent-toggle-outside-workspace-error)
+(setq agentsmith-agent-toggle-outside-workspace-and-go
+      #'agentsmith-agent-toggle-outside-workspace-error)
 ```
 
 ### Agent backends

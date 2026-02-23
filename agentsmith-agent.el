@@ -60,6 +60,14 @@ previous behavior of signaling an error."
   :type 'function
   :group 'agentsmith-agent)
 
+(defcustom agentsmith-agent-toggle-outside-workspace-and-go
+  #'agentsmith-agent-toggle-for-directory-and-go
+  "Function called to toggle-and-go an agent outside a registered workspace.
+Called with a single DIRECTORY argument.  Like
+`agentsmith-agent-toggle-outside-workspace' but selects the agent window."
+  :type 'function
+  :group 'agentsmith-agent)
+
 ;;; Config Registry
 
 (defvar agentsmith-agent-configs
@@ -279,6 +287,13 @@ If the agent buffer is visible, hide it.  Otherwise show or start it."
 (defun agentsmith-agent-toggle-outside-workspace-error (_directory)
   "Signal an error indicating the directory is not in a registered worktree."
   (user-error "Current directory is not inside a registered worktree"))
+
+(defun agentsmith-agent-toggle-for-directory-and-go (directory)
+  "Like `agentsmith-agent-toggle-for-directory' but select the agent window."
+  (agentsmith-agent-toggle-for-directory directory)
+  (when-let* ((buf (agentsmith-agent-detect-buffer-for-dir directory))
+              (win (get-buffer-window buf t)))
+    (select-window win)))
 
 ;;; Claude Code IDE Backend Helpers
 
