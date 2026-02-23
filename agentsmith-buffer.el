@@ -252,6 +252,8 @@ If the project is already open (has file-visiting buffers), switches to
 it via `agentsmith-switch-to-existing-project-function' instead of
 showing the file finder.  Falls back to `projectile-switch-project-action'
 for new projects."
+  (when (derived-mode-p 'agentsmith-mode)
+    (quit-window))
   (let* ((dir (file-name-as-directory (expand-file-name directory)))
          (ws (agentsmith-workspace-find-by-directory dir))
          (project-dir (if ws
