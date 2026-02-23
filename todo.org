@@ -2,7 +2,7 @@
 * DONE evil mode keybinds
 -
 * DONE do not ask for branch name on worktree creation. Also, when you create the worktree currently you are using the reponame as the worktree name. don't do that: instead use the workspace name as the worktree name!
-* TODO update enter behavior for the
+* DONE update enter behavior for the
 
 * DONE Pass an agent method configuration object rather than the funky hardcode claude-code-ide stuff in `agentsmith-agent.el` now
 ex want something more like:
@@ -14,14 +14,22 @@ ex want something more like:
 ))
 
 ...etc
-* TODO project agent management
+* DONE project agent management
 ** agentsmith-open-workspace-agent
 ** agentsmith-open-worktree-agent
 
-* TODO popup buffer to select an agent in the workspace
+* DONE popup buffer to select an agent in the workspace
 ** ex will list each worktree name & allow user to type / scroll and press enter to open the agent
-* TODO press o to open the workspace as a projectile tab (or goto it if it's already open)
-* TODO agensmith-workspace-list use an ibuffer or similar to view the agent workspaces so user can choose and visit one in its projectile workspace tab (similar to pressing o)
-* TODO toggle agent workspace / worktree to close buffer
-* TODO pressing RET on a worktree opens the find-file-in workspace interface
+* DONE press o to open the workspace as a projectile tab (or goto it if it's already open)
+* DONE agensmith-workspace-list use an ibuffer or similar to view the agent workspaces so user can choose and visit one in its projectile workspace tab (similar to pressing o)
+* DONE toggle agent workspace / worktree to close buffer
+* DONE pressing RET on a worktree opens the find-file-in workspace interface
 ** expose this as an agentsmith configurable, ex doom emacs users might want to register +ivy/projectile-find-file or similar rather than the normal projectile-find-file interface, etc.
+* TODO export the doom projectile stub as a helper setting to make enabling easier
+* TODO multiple agents per workspace / worktree
+lets extend the capabilities a little more to support multiple backends per
+ workspace and worktree. There should now be global config options for workspace
+ and worktree for the default agent type to use. The global view should now also
+ support expanding a nested view of each agent running for each worktree &
+ workspace. users should be able to press a hotkey to set that agent as the
+ 'default' which will be used for future agent-toggle calls, etc.
