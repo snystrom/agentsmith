@@ -37,17 +37,26 @@
   "AgentSmith dispatch menu."
   ["Workspace"
    ("c" "Create workspace"  agentsmith-create-workspace)
+   ("i" "Import workspace"  agentsmith-workspace-import)
    ("o" "Open workspace"    agentsmith-workspace-open-interactive)
-   ("d" "Delete workspace"  agentsmith-workspace-delete-interactive)]
+   ("x" "Delete..."         agentsmith-transient-delete)]
   ["Worktree"
-   ("w" "Add worktree"      agentsmith-dispatch--add-worktree)
-   ("W" "Remove worktree"   agentsmith-dispatch--remove-worktree)]
+   ("w" "Add worktree"      agentsmith-dispatch--add-worktree)]
   ["Agent"
    ("a" "Start agent"       agentsmith-dispatch--start-agent)
    ("s" "Stop agent"        agentsmith-dispatch--stop-agent)
    ("b" "Show agent buffer" agentsmith-dispatch--show-agent)]
   ["Buffer"
    ("g" "Refresh"           agentsmith-buffer-refresh)])
+
+;;; Delete Menu
+
+;;;###autoload (autoload 'agentsmith-transient-delete "agentsmith-transient" nil t)
+(transient-define-prefix agentsmith-transient-delete ()
+  "Delete/remove actions for the item at point."
+  ["Delete"
+   ("d" "Deregister (keep files)" agentsmith-delete-at-point)
+   ("D" "Delete from disk"        agentsmith-delete-from-disk-at-point)])
 
 ;;; Workspace Agent Menu
 

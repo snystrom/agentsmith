@@ -130,7 +130,7 @@ Active when point is on a workspace heading."
   "D"           #'agentsmith-workspace-dired-at-point
   "a"           #'agentsmith-workspace-agent-at-point
   "w"           #'agentsmith-workspace-add-worktree-at-point
-  "d"           #'agentsmith-workspace-delete-at-point
+  "x"           #'agentsmith-transient-delete
   "p"           #'agentsmith-workspace-plans-at-point)
 
 (defvar-keymap agentsmith-worktree-section-map
@@ -140,7 +140,7 @@ Active when point is on a worktree line."
   "D"           #'agentsmith-worktree-dired-at-point
   "S-<return>"  #'agentsmith-worktree-agent-popup-at-point
   "a"           #'agentsmith-worktree-agent-at-point
-  "d"           #'agentsmith-worktree-remove-at-point)
+  "x"           #'agentsmith-transient-delete)
 
 ;;; Buffer State
 
@@ -325,11 +325,42 @@ otherwise starts an agent directly."
     (user-error "No workspace at point")))
 
 (defun agentsmith-workspace-delete-at-point ()
-  "Delete the workspace at point."
+  "Deregister the workspace at point (keep files on disk)."
   (interactive)
   (if-let* ((ws (agentsmith--workspace-at-point)))
-      (when (yes-or-no-p (format "Delete workspace '%s'? (files kept on disk) "
+      (when (yes-or-no-p (format "Deregister workspace '%s'? (files kept on disk) "
                                  (agentsmith-workspace-name ws)))
+        (agentsmith-workspace-delete ws)
+        (setq agentsmith--workspaces
+              (cl-remove ws agentsmith--workspaces :test #'eq))
+        (agentsmith-buffer-refresh))
+    (user-error "No workspace at point")))
+
+(defun agentsmith-workspace-delete-from-disk-at-point ()
+  "Delete the workspace at point, removing all files from disk."
+  (interactive)
+  (if-let* ((ws (agentsmith--workspace-at-point)))
+      (when (yes-or-no-p
+             (format "PERMANENTLY delete workspace '%s' and ALL files in %s? "
+                     (agentsmith-workspace-name ws)
+                     (abbreviate-file-name (agentsmith-workspace-directory ws))))
+        ;; Stop all agents
+        (dolist (wt (agentsmith-workspace-worktrees ws))
+          (when-let* ((session (agentsmith-worktree-agent-session wt)))
+            (agentsmith-agent-stop-session session)))
+        (when-let* ((session (agentsmith-workspace-agent-session ws)))
+          (agentsmith-agent-stop-session session))
+        ;; Remove each worktree via VCS
+        (dolist (wt (agentsmith-workspace-worktrees ws))
+          (condition-case err
+              (agentsmith-worktree-remove
+               (agentsmith-worktree-vcs wt)
+               (agentsmith-worktree-path wt)
+               (agentsmith-worktree-source-repo wt))
+            (error (message "Warning: %s" (error-message-string err)))))
+        ;; Delete workspace directory from disk
+        (delete-directory (agentsmith-workspace-directory ws) t)
+        ;; Deregister
         (agentsmith-workspace-delete ws)
         (setq agentsmith--workspaces
               (cl-remove ws agentsmith--workspaces :test #'eq))
@@ -378,18 +409,32 @@ Dispatches to the worktree agent transient if available."
     (user-error "No worktree at point")))
 
 (defun agentsmith-worktree-remove-at-point ()
+  "Deregister the worktree at point (keep files on disk)."
+  (interactive)
+  (let ((wt (agentsmith--worktree-at-point))
+        (ws (agentsmith--workspace-for-worktree-at-point)))
+    (unless wt (user-error "No worktree at point"))
+    (unless ws (user-error "Cannot determine parent workspace"))
+    (when (yes-or-no-p (format "Deregister worktree '%s'? (files kept on disk) "
+                               (agentsmith-worktree-name wt)))
+      (when-let* ((session (agentsmith-worktree-agent-session wt)))
+        (agentsmith-agent-stop-session session))
+      (agentsmith-workspace-remove-worktree ws wt)
+      (agentsmith-buffer-refresh))))
+
+(defun agentsmith-worktree-remove-from-disk-at-point ()
   "Remove the worktree at point from its workspace and disk."
   (interactive)
   (let ((wt (agentsmith--worktree-at-point))
         (ws (agentsmith--workspace-for-worktree-at-point)))
     (unless wt (user-error "No worktree at point"))
     (unless ws (user-error "Cannot determine parent workspace"))
-    (when (yes-or-no-p (format "Remove worktree '%s'? "
+    (when (yes-or-no-p (format "PERMANENTLY remove worktree '%s' from disk? "
                                (agentsmith-worktree-name wt)))
       ;; Stop agent if running
       (when-let* ((session (agentsmith-worktree-agent-session wt)))
         (agentsmith-agent-stop-session session))
-      ;; Remove from disk
+      ;; Remove from disk via VCS
       (condition-case err
           (agentsmith-worktree-remove
            (agentsmith-worktree-vcs wt)
@@ -452,11 +497,19 @@ is derived from the repo basename for identification."
    (t (user-error "No workspace or worktree at point"))))
 
 (defun agentsmith-delete-at-point ()
-  "Delete the workspace or remove the worktree at point."
+  "Deregister the workspace or worktree at point (keep files on disk)."
   (interactive)
   (cond
    ((agentsmith--worktree-at-point) (agentsmith-worktree-remove-at-point))
    ((agentsmith--workspace-at-point) (agentsmith-workspace-delete-at-point))
+   (t (user-error "Nothing at point"))))
+
+(defun agentsmith-delete-from-disk-at-point ()
+  "Delete the workspace or worktree at point, removing files from disk."
+  (interactive)
+  (cond
+   ((agentsmith--worktree-at-point) (agentsmith-worktree-remove-from-disk-at-point))
+   ((agentsmith--workspace-at-point) (agentsmith-workspace-delete-from-disk-at-point))
    (t (user-error "Nothing at point"))))
 
 (defun agentsmith-agent-popup-at-point ()
@@ -505,6 +558,7 @@ Users can override bindings with `keymap-set'."
   :parent magit-section-mode-map
   "g"           #'agentsmith-buffer-refresh
   "c"           #'agentsmith-create-workspace
+  "i"           #'agentsmith-workspace-import
   "q"           #'quit-window
   "?"           #'agentsmith-dispatch)
 
@@ -535,10 +589,11 @@ Users can override bindings with `keymap-set'."
     "?"                  #'agentsmith-dispatch
     "gr"                 #'agentsmith-buffer-refresh
     "c"                  #'agentsmith-create-workspace
+    "i"                  #'agentsmith-workspace-import
     (kbd "RET")          #'agentsmith-open-at-point
     (kbd "S-<return>")   #'agentsmith-agent-popup-at-point
     "a"                  #'agentsmith-agent-at-point
-    "d"                  #'agentsmith-delete-at-point
+    "x"                  #'agentsmith-transient-delete
     "D"                  #'agentsmith-dired-at-point
     "q"                  #'quit-window)
   (add-hook 'agentsmith-mode-hook #'evil-normalize-keymaps))

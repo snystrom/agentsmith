@@ -248,9 +248,11 @@ Does NOT remove the worktree from disk -- caller is responsible for that."
   workspace)
 
 (defun agentsmith-workspace-delete (workspace)
-  "Delete WORKSPACE. Deregisters but does NOT remove files from disk.
-Prompts for confirmation in interactive use."
+  "Delete WORKSPACE. Deregisters but does NOT remove files from disk."
   (agentsmith-workspace-deregister (agentsmith-workspace-directory workspace))
+  (when (fboundp 'projectile-remove-known-project)
+    (projectile-remove-known-project
+     (file-name-as-directory (agentsmith-workspace-directory workspace))))
   (run-hook-with-args 'agentsmith-after-workspace-delete-hook workspace))
 
 ;;; Interactive Commands
@@ -294,6 +296,59 @@ Prompts for NAME and DIRECTORY."
                                (agentsmith-workspace-name ws)))
       (agentsmith-workspace-delete ws)
       (message "Deleted workspace: %s" (agentsmith-workspace-name ws)))))
+
+(declare-function agentsmith-worktree-detect-vcs "agentsmith-worktree" (repo-path))
+(declare-function agentsmith-worktree-branch-info "agentsmith-worktree" (vcs worktree-path))
+
+(defun agentsmith-workspace-import (name directory)
+  "Import an existing directory as an agentsmith workspace.
+If DIRECTORY already has an .agentsmith.el config, re-registers it.
+Otherwise scans for git/jj repos in subdirectories and creates the config.
+Imported workspaces get metadata (:imported t)."
+  (interactive
+   (let* ((dir (read-directory-name "Import workspace directory: "))
+          (name (read-string "Workspace name: "
+                             (file-name-nondirectory
+                              (directory-file-name dir)))))
+     (list name dir)))
+  (let* ((dir (expand-file-name directory))
+         (config-file (expand-file-name agentsmith-workspace--config-file dir)))
+    (if (file-readable-p config-file)
+        ;; Re-register existing config
+        (let ((ws (agentsmith-workspace-load dir)))
+          (agentsmith-workspace-register dir)
+          (when (fboundp 'projectile-add-known-project)
+            (projectile-add-known-project dir))
+          (message "Re-registered workspace: %s" (agentsmith-workspace-name ws))
+          ws)
+      ;; Scan subdirectories for repos
+      (let ((worktrees nil))
+        (dolist (subdir (directory-files dir t "\\`[^.]"))
+          (when (file-directory-p subdir)
+            (when-let* ((vcs (agentsmith-worktree-detect-vcs subdir)))
+              (let ((branch (condition-case nil
+                                (agentsmith-worktree-branch-info vcs subdir)
+                              (error nil))))
+                (push (make-agentsmith-worktree
+                       :name (file-name-nondirectory subdir)
+                       :path (expand-file-name subdir)
+                       :source-repo nil
+                       :vcs vcs
+                       :branch branch)
+                      worktrees)))))
+        (let ((ws (make-agentsmith-workspace
+                   :name name
+                   :directory dir
+                   :default-agent-backend 'claude-code-ide
+                   :worktrees (nreverse worktrees)
+                   :metadata '(:imported t))))
+          (agentsmith-workspace-save ws)
+          (agentsmith-workspace-register dir)
+          (when (fboundp 'projectile-add-known-project)
+            (projectile-add-known-project dir))
+          (message "Imported workspace: %s (%d repos found)"
+                   name (length worktrees))
+          ws)))))
 
 (defun agentsmith-workspace-open-plans (workspace)
   "Open the plans directory for WORKSPACE in dired."
