@@ -82,6 +82,7 @@ Doom Emacs
 | `M-x agentsmith-workspace-toggle-agent` | Toggle agent popup for the current workspace |
 | `M-x agentsmith-workspace-toggle-agent-and-go` | Toggle agent popup for workspace and move cursor into it |
 | `M-x agentsmith-workspace-select-worktree-agent` | Select a worktree in the current workspace and open its agent |
+| `M-x agentsmith-workspace-import` | Import an existing directory as a workspace |
 
 ## Keybindings
 
@@ -96,9 +97,10 @@ Doom Emacs
 | `a` | Workspace | Workspace agent transient menu |
 | `a` | Worktree | Worktree agent transient menu |
 | `w` | Workspace | Add a worktree |
-| `d` | Any | Delete workspace / remove worktree |
+| `x` | Any | Delete menu (`d` deregister, `D` delete from disk) |
 | `p` | Workspace | Open plans directory |
 | `c` | Global | Create workspace |
+| `i` | Global | Import workspace |
 | `g` | Global | Refresh buffer |
 | `q` | Global | Quit buffer |
 | `?` | Global | Dispatch transient menu |
@@ -162,6 +164,22 @@ The fallback behavior is controlled by function-valued defcustoms, so you can cu
 (setq agentsmith-agent-toggle-outside-workspace-and-go
       #'agentsmith-agent-toggle-outside-workspace-error)
 ```
+
+### Importing workspaces
+
+You can import an existing directory as a workspace with `M-x agentsmith-workspace-import` or `i` in the status buffer. This handles two cases:
+
+1. **Re-registering a soft-deleted workspace**: If the directory has an existing `.agentsmith.el` config (e.g. from a previous workspace that was deregistered), it re-registers it directly.
+2. **Importing a manually-created directory**: If there's no config, AgentSmith scans immediate subdirectories for git/jj repos and builds the workspace config automatically. Imported workspaces are tagged with `(:imported t)` in their metadata.
+
+### Deleting workspaces and worktrees
+
+Pressing `x` on a workspace or worktree opens the delete menu:
+
+- **`x d`** — **Deregister** (soft delete): removes from AgentSmith's registry but keeps all files on disk. The `.agentsmith.el` config remains, so you can re-import later.
+- **`x D`** — **Delete from disk** (hard delete): permanently removes all files including the workspace directory. For worktrees, this also calls `git worktree remove` / `jj workspace forget`.
+
+Both options stop any running agents and deregister from projectile.
 
 ### Agent backends
 
