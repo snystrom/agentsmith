@@ -58,6 +58,11 @@
   :type 'directory
   :group 'agentsmith-workspace)
 
+(defcustom agentsmith-default-repo-parent "~/repos/"
+  "Default directory shown when prompting for a repository to add as a worktree."
+  :type 'directory
+  :group 'agentsmith-workspace)
+
 (defcustom agentsmith-workspace-directory
   (expand-file-name "agentsmith" user-emacs-directory)
   "Directory for agentsmith global state (registry, etc)."

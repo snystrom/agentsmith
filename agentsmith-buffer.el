@@ -453,7 +453,8 @@ Dispatches to the worktree agent transient if available."
 Prompts for repository path. Uses the workspace name as the VCS
 worktree/branch name automatically. The display name in the UI
 is derived from the repo basename for identification."
-  (let* ((repo-path (read-directory-name "Repository path: "))
+  (let* ((repo-path (read-directory-name "Repository path: "
+                                         agentsmith-default-repo-parent))
          (vcs (agentsmith-worktree-detect-vcs repo-path))
          (ws-name (agentsmith-workspace-name workspace))
          (repo-basename (file-name-nondirectory (directory-file-name repo-path)))

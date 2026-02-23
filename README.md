@@ -111,6 +111,31 @@ Evil normal-state bindings are set up automatically when evil is loaded. All the
 
 ## Configuration
 
+### Default paths
+
+AgentSmith uses three directory settings:
+
+- `agentsmith-default-workspace-parent` — where new workspaces are created (default: `~/workspaces/`)
+- `agentsmith-default-repo-parent` — default directory when prompting for repos to add as worktrees (default: `~/repos/`)
+- `agentsmith-workspace-directory` — where AgentSmith stores its global registry (default: `<user-emacs-directory>/agentsmith/`)
+
+```elisp
+;; Standard Emacs
+(setq agentsmith-default-workspace-parent "~/projects/workspaces/")
+(setq agentsmith-default-repo-parent "~/projects/repos/")
+(setq agentsmith-workspace-directory "~/.emacs.d/agentsmith/")
+```
+
+```elisp
+;; Doom Emacs (config.el)
+(after! agentsmith
+  (setq agentsmith-default-workspace-parent "~/projects/workspaces/")
+  (setq agentsmith-default-repo-parent "~/projects/repos/")
+  ;; Doom sets user-emacs-directory to ~/.config/emacs/, so the default is
+  ;; ~/.config/emacs/agentsmith/ — override if you prefer a different location
+  (setq agentsmith-workspace-directory "~/.config/emacs/.local/agentsmith/"))
+```
+
 ### Open behavior
 
 When you press `RET` on a workspace or worktree, AgentSmith calls `projectile-switch-project-action` in that directory. This means your projectile configuration controls what happens — whether that's `projectile-find-file`, a Doom-specific action, or something custom.
