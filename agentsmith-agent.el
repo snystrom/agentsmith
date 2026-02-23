@@ -323,7 +323,12 @@ This avoids trailing-slash mismatches with the process hash table."
           (when-let* ((proc (claude-code-ide--get-process)))
             (process-buffer proc)))
         (when (fboundp 'claude-code-ide--get-buffer-name)
-          (get-buffer (claude-code-ide--get-buffer-name))))))
+          (when-let* ((buf (get-buffer (claude-code-ide--get-buffer-name))))
+            ;; Verify directory matches to avoid basename collisions
+            ;; (e.g. two dirs named "repo-a" producing *claude-code[repo-a]*)
+            (when (file-equal-p default-directory
+                                (buffer-local-value 'default-directory buf))
+              buf))))))
 
 (defun agentsmith--claude-code-ide-status (directory)
   "Return status of claude-code-ide in DIRECTORY.
