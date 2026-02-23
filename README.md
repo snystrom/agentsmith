@@ -82,6 +82,8 @@ Doom Emacs
 | `M-x agentsmith-workspace-toggle-agent` | Toggle agent popup for the current workspace |
 | `M-x agentsmith-workspace-toggle-agent-and-go` | Toggle agent popup for workspace and move cursor into it |
 | `M-x agentsmith-workspace-select-worktree-agent` | Select a worktree in the current workspace and open its agent |
+| `M-x agentsmith-worktree-find-file` | Select a worktree, then find a file in it (opens under workspace project) |
+| `M-x agentsmith-workspace-switch-buffer` | Switch to an open buffer belonging to the current workspace |
 | `M-x agentsmith-workspace-import` | Import an existing directory as a workspace |
 
 ## Keybindings
