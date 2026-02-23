@@ -204,9 +204,5 @@ If you use Doom's `ui/workspaces` module, you can configure AgentSmith to switch
   :config
   ;; Switch to existing Doom workspace tab if open
   (setq agentsmith-switch-to-existing-project-function
-        (lambda (dir)
-          (let ((name (file-name-nondirectory (directory-file-name dir))))
-            (when (+workspace-exists-p name)
-              (+workspace-switch name)
-              t)))))
+        #'agentsmith-switch-to-existing-project-doom-workspace))
 ```

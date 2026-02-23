@@ -63,15 +63,20 @@ nil if the project is not already open.
 When this returns nil, `projectile-switch-project-action' is called
 instead to do a full project switch with file selection.
 
-Doom Emacs users who want workspace tab switching can set this to:
-
-  (lambda (dir)
-    (let ((name (file-name-nondirectory (directory-file-name dir))))
-      (when (+workspace-exists-p name)
-        (+workspace-switch name)
-        t)))"
+Doom Emacs users who want workspace tab switching can set this to
+`agentsmith-switch-to-existing-project-doom-workspace'."
   :type 'function
   :group 'agentsmith-buffer)
+
+(defun agentsmith-switch-to-existing-project-doom-workspace (dir)
+  "Switch to an existing Doom workspace tab for DIR.
+For use as `agentsmith-switch-to-existing-project-function' with
+Doom Emacs's `ui/workspaces' module."
+  (let ((name (file-name-nondirectory (directory-file-name dir))))
+    (when (and (fboundp '+workspace-exists-p)
+               (+workspace-exists-p name))
+      (+workspace-switch name)
+      t)))
 
 ;;; Faces
 
