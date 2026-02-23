@@ -235,6 +235,8 @@ backend directly (detects externally-started agents)."
 (defun agentsmith--switch-to-existing-project-default (project-dir)
   "Switch to PROJECT-DIR if it has open file-visiting buffers.
 Returns non-nil if switched, nil if no buffers found.
+If a project buffer is visible in a window, selects that window.
+Otherwise switches to the first project buffer.
 Uses `file-in-directory-p' directly rather than projectile's buffer
 detection, which can return stale results due to project root caching."
   (let ((bufs (cl-remove-if-not
@@ -243,7 +245,9 @@ detection, which can return stale results due to project root caching."
                    (file-in-directory-p f project-dir)))
                (buffer-list))))
     (when bufs
-      (switch-to-buffer (car bufs))
+      (if-let* ((win (cl-some #'get-buffer-window bufs)))
+          (select-window win)
+        (switch-to-buffer (car bufs)))
       t)))
 
 (defun agentsmith--switch-to-project (directory)
