@@ -314,5 +314,35 @@ Calls `projectile-switch-to-buffer' scoped to the workspace directory."
            (file-name-as-directory (agentsmith-workspace-directory ws))))
       (projectile-switch-to-buffer))))
 
+;;; Plans & Scratch
+
+;;;###autoload
+(defun agentsmith-open-scratch ()
+  "Open a scratch buffer for the workspace containing `default-directory'."
+  (interactive)
+  (let ((ws (agentsmith-workspace-find-by-directory default-directory)))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (agentsmith-workspace-open-scratch ws)))
+
+;;;###autoload
+(defun agentsmith-create-plan ()
+  "Create a new plan file in the workspace containing `default-directory'."
+  (interactive)
+  (let ((ws (agentsmith-workspace-find-by-directory default-directory)))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (let ((name (read-string "Plan name: ")))
+      (agentsmith-workspace-create-plan ws name))))
+
+;;;###autoload
+(defun agentsmith-find-plan ()
+  "Find an existing plan file in the workspace containing `default-directory'."
+  (interactive)
+  (let ((ws (agentsmith-workspace-find-by-directory default-directory)))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (agentsmith-workspace-find-plan ws)))
+
 (provide 'agentsmith)
 ;;; agentsmith.el ends here

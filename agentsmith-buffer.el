@@ -131,7 +131,7 @@ Active when point is on a workspace heading."
   "a"           #'agentsmith-workspace-agent-at-point
   "w"           #'agentsmith-workspace-add-worktree-at-point
   "x"           #'agentsmith-transient-delete
-  "p"           #'agentsmith-workspace-plans-at-point)
+  "p"           #'agentsmith-transient-workspace-plans)
 
 (defvar-keymap agentsmith-worktree-section-map
   :doc "Keymap for worktree sections in the agentsmith buffer.
@@ -376,6 +376,28 @@ otherwise starts an agent directly."
   (interactive)
   (if-let* ((ws (agentsmith--workspace-at-point)))
       (agentsmith-workspace-open-plans ws)
+    (user-error "No workspace at point")))
+
+(defun agentsmith-workspace-scratch-at-point ()
+  "Open scratch buffer for the workspace at point."
+  (interactive)
+  (if-let* ((ws (agentsmith--workspace-at-point)))
+      (agentsmith-workspace-open-scratch ws)
+    (user-error "No workspace at point")))
+
+(defun agentsmith-workspace-create-plan-at-point ()
+  "Create a new plan file for the workspace at point."
+  (interactive)
+  (if-let* ((ws (agentsmith--workspace-at-point)))
+      (let ((name (read-string "Plan name: ")))
+        (agentsmith-workspace-create-plan ws name))
+    (user-error "No workspace at point")))
+
+(defun agentsmith-workspace-find-plan-at-point ()
+  "Find an existing plan file for the workspace at point."
+  (interactive)
+  (if-let* ((ws (agentsmith--workspace-at-point)))
+      (agentsmith-workspace-find-plan ws)
     (user-error "No workspace at point")))
 
 ;;; Section Commands -- Worktree

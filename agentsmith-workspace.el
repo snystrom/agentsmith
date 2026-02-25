@@ -376,6 +376,52 @@ Imported workspaces get metadata (:imported t)."
       (make-directory plans-dir t))
     (dired plans-dir)))
 
+(defcustom agentsmith-scratch-buffer-mode #'org-mode
+  "Major mode function for scratch buffers.
+Called once when a scratch buffer is first created."
+  :type 'function
+  :group 'agentsmith-workspace)
+
+(defun agentsmith-workspace-open-scratch (workspace)
+  "Open or switch to an ephemeral scratch buffer for WORKSPACE.
+The buffer is named *agentsmith-scratch: <name>* and uses the
+major mode specified by `agentsmith-scratch-buffer-mode'."
+  (let* ((name (agentsmith-workspace-name workspace))
+         (buf-name (format "*agentsmith-scratch: %s*" name))
+         (buf (get-buffer buf-name)))
+    (unless buf
+      (setq buf (get-buffer-create buf-name))
+      (with-current-buffer buf
+        (funcall agentsmith-scratch-buffer-mode)
+        (setq-local default-directory
+                    (file-name-as-directory
+                     (agentsmith-workspace-directory workspace)))))
+    (pop-to-buffer buf)))
+
+(defun agentsmith-workspace-create-plan (workspace name)
+  "Create a new plan file NAME.org in WORKSPACE's plans directory.
+Signals an error if the file already exists."
+  (let* ((plans-dir (expand-file-name "plans/"
+                                      (agentsmith-workspace-directory workspace)))
+         (file (expand-file-name (concat name ".org") plans-dir)))
+    (unless (file-directory-p plans-dir)
+      (make-directory plans-dir t))
+    (when (file-exists-p file)
+      (user-error "Plan file already exists: %s" file))
+    (find-file file)))
+
+(defun agentsmith-workspace-find-plan (workspace)
+  "Select and open an existing plan file in WORKSPACE.
+Uses `completing-read' over .org files in the plans directory."
+  (let* ((plans-dir (expand-file-name "plans/"
+                                      (agentsmith-workspace-directory workspace)))
+         (files (and (file-directory-p plans-dir)
+                     (directory-files plans-dir nil "\\.org\\'"))))
+    (unless files
+      (user-error "No plan files found in %s" plans-dir))
+    (let ((choice (completing-read "Plan: " files nil t)))
+      (find-file (expand-file-name choice plans-dir)))))
+
 ;;; Directory Lookup
 
 (defun agentsmith-workspace-find-by-directory (dir)

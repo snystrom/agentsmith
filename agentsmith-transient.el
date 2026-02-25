@@ -29,6 +29,10 @@
 (declare-function agentsmith-workspace-add-worktree-interactive "agentsmith-buffer"
                   (workspace))
 (declare-function agentsmith-create-workspace "agentsmith" ())
+(declare-function agentsmith-workspace-plans-at-point "agentsmith-buffer" ())
+(declare-function agentsmith-workspace-scratch-at-point "agentsmith-buffer" ())
+(declare-function agentsmith-workspace-create-plan-at-point "agentsmith-buffer" ())
+(declare-function agentsmith-workspace-find-plan-at-point "agentsmith-buffer" ())
 
 ;;; Dispatch Menu
 
@@ -46,6 +50,8 @@
    ("a" "Start agent"       agentsmith-dispatch--start-agent)
    ("s" "Stop agent"        agentsmith-dispatch--stop-agent)
    ("b" "Show agent buffer" agentsmith-dispatch--show-agent)]
+  ["Plans"
+   ("p" "Plans menu..."     agentsmith-transient-workspace-plans)]
   ["Buffer"
    ("g" "Refresh"           agentsmith-buffer-refresh)])
 
@@ -81,6 +87,17 @@
    ("s" "Stop agent"        agentsmith-transient--wt-stop-agent)
    ("b" "Show agent buffer" agentsmith-transient--wt-show-agent)
    ("B" "Select backend"    agentsmith-transient--wt-select-backend)])
+
+;;; Workspace Plans Menu
+
+;;;###autoload (autoload 'agentsmith-transient-workspace-plans "agentsmith-transient" nil t)
+(transient-define-prefix agentsmith-transient-workspace-plans ()
+  "Plans actions for the workspace at point."
+  ["Plans"
+   ("p" "Open plans directory"  agentsmith-workspace-plans-at-point)
+   ("n" "New plan file"         agentsmith-workspace-create-plan-at-point)
+   ("f" "Find plan file"        agentsmith-workspace-find-plan-at-point)
+   ("s" "Scratch buffer"        agentsmith-workspace-scratch-at-point)])
 
 ;;; Dispatch Helpers
 ;; These commands operate on whatever is at point (workspace or worktree).

@@ -64,7 +64,7 @@ Status detection falls back to querying the backend's `status` operation when no
 - `g` — refresh
 - `c` — create workspace
 - `?` — dispatch transient
-- On workspace: `RET`=open, `a`=agent menu, `w`=add worktree, `d`=delete, `p`=plans
+- On workspace: `RET`=open, `a`=agent menu, `w`=add worktree, `d`=delete, `p`=plans menu (p=dired, n=new, f=find, s=scratch)
 - On worktree: `RET`=open, `S-RET`=agent popup, `a`=agent menu, `d`=remove
 
 ## VCS Operations (agentsmith-worktree.el)
