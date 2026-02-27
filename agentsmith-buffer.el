@@ -20,6 +20,7 @@
 (require 'agentsmith-workspace)
 (require 'agentsmith-worktree)
 (require 'agentsmith-agent)
+(require 'agentsmith-kanban)
 
 ;;; Customization
 
@@ -105,6 +106,16 @@ Doom Emacs's `ui/workspaces' module."
   "Face for branch/bookmark names in the agentsmith buffer."
   :group 'agentsmith-buffer)
 
+(defface agentsmith-column-heading
+  '((t :inherit magit-section-heading :weight bold))
+  "Face for kanban column headings in the agentsmith buffer."
+  :group 'agentsmith-buffer)
+
+(defface agentsmith-column-unregistered
+  '((t :inherit shadow))
+  "Face for workspace names in kanban that are not in the registry."
+  :group 'agentsmith-buffer)
+
 ;;; Section Classes
 
 ;; Define EIEIO section subclasses so we can set our own keymap
@@ -121,6 +132,10 @@ Doom Emacs's `ui/workspaces' module."
   ((keymap :initform 'agentsmith-worktree-section-map))
   "Section representing a worktree within a workspace.")
 
+(defclass agentsmith-column-section (magit-section)
+  ((keymap :initform 'agentsmith-column-section-map))
+  "Section representing a kanban column.")
+
 ;;; Section Keymaps
 
 (defvar-keymap agentsmith-workspace-section-map
@@ -131,7 +146,10 @@ Active when point is on a workspace heading."
   "a"           #'agentsmith-workspace-agent-at-point
   "w"           #'agentsmith-workspace-add-worktree-at-point
   "x"           #'agentsmith-transient-delete
-  "p"           #'agentsmith-transient-workspace-plans)
+  "p"           #'agentsmith-transient-workspace-plans
+  "m"           #'agentsmith-kanban-move-workspace-at-point
+  "M-n"         #'agentsmith-kanban-shift-down-at-point
+  "M-p"         #'agentsmith-kanban-shift-up-at-point)
 
 (defvar-keymap agentsmith-worktree-section-map
   :doc "Keymap for worktree sections in the agentsmith buffer.
@@ -142,10 +160,27 @@ Active when point is on a worktree line."
   "a"           #'agentsmith-worktree-agent-at-point
   "x"           #'agentsmith-transient-delete)
 
+(defvar-keymap agentsmith-column-section-map
+  :doc "Keymap for column sections in the kanban view.
+Active when point is on a column heading."
+  "RET"         #'magit-section-toggle
+  "c"           #'agentsmith-kanban-create-column
+  "r"           #'agentsmith-kanban-rename-column-at-point
+  "x"           #'agentsmith-kanban-delete-column-at-point
+  "m"           #'agentsmith-kanban-move-workspace-at-point
+  "M-n"         #'agentsmith-kanban-shift-down-at-point
+  "M-p"         #'agentsmith-kanban-shift-up-at-point)
+
 ;;; Buffer State
 
 (defvar-local agentsmith--workspaces nil
   "List of `agentsmith-workspace' structs displayed in this buffer.")
+
+(defvar-local agentsmith--current-view 'workspaces
+  "Current view mode: `workspaces' (flat list) or `kanban' (columns).")
+
+(defvar-local agentsmith--kanban-columns nil
+  "Cached parsed kanban columns alist from kanban.org.")
 
 ;;; Status Indicator
 
@@ -171,34 +206,45 @@ backend directly (detects externally-started agents)."
 ;;; Section Rendering
 
 (defun agentsmith-buffer-refresh (&optional _ignore-auto _noconfirm)
-  "Refresh the agentsmith status buffer."
+  "Refresh the agentsmith status buffer.
+Dispatches to the appropriate renderer based on `agentsmith--current-view'."
   (interactive)
+  (setq agentsmith--workspaces (agentsmith-workspace-load-all))
   (let ((inhibit-read-only t)
         (pos (point)))
     (erase-buffer)
     (magit-insert-section (agentsmith-root-section)
-      (insert (propertize "AgentSmith" 'face 'magit-section-heading) "\n")
-      (if agentsmith--workspaces
-          (dolist (ws agentsmith--workspaces)
-            (agentsmith--insert-workspace-section ws))
-        (insert "\n")
-        (insert (propertize "  No workspaces. Press " 'face 'shadow))
-        (insert (propertize "c" 'face 'transient-key))
-        (insert (propertize " to create one, or " 'face 'shadow))
-        (insert (propertize "?" 'face 'transient-key))
-        (insert (propertize " for help.\n" 'face 'shadow))))
+      (pcase agentsmith--current-view
+        ('kanban (agentsmith--render-kanban-view))
+        (_ (agentsmith--render-workspaces-view))))
     (goto-char (min pos (point-max)))))
 
-(defun agentsmith--insert-workspace-section (workspace)
-  "Insert a magit section for WORKSPACE."
-  (let* ((name (agentsmith-workspace-name workspace))
+(defun agentsmith--render-workspaces-view ()
+  "Render the flat workspace list view."
+  (insert (propertize "AgentSmith" 'face 'magit-section-heading) "\n")
+  (if agentsmith--workspaces
+      (dolist (ws agentsmith--workspaces)
+        (agentsmith--insert-workspace-section ws))
+    (insert "\n")
+    (insert (propertize "  No workspaces. Press " 'face 'shadow))
+    (insert (propertize "c" 'face 'transient-key))
+    (insert (propertize " to create one, or " 'face 'shadow))
+    (insert (propertize "?" 'face 'transient-key))
+    (insert (propertize " for help.\n" 'face 'shadow))))
+
+(defun agentsmith--insert-workspace-section (workspace &optional indent)
+  "Insert a magit section for WORKSPACE.
+Optional INDENT is a string prefix for visual nesting (e.g. in kanban view)."
+  (let* ((indent (or indent ""))
+         (name (agentsmith-workspace-name workspace))
          (dir (abbreviate-file-name (agentsmith-workspace-directory workspace)))
          (agent (agentsmith-workspace-agent-session workspace))
          (status (agentsmith--get-agent-status
                   agent (agentsmith-workspace-directory workspace))))
     (magit-insert-section (agentsmith-workspace-section workspace t)
       (magit-insert-heading
-        (format "%s %s  %s\n"
+        (format "%s%s %s  %s\n"
+                indent
                 (agentsmith--status-indicator status)
                 (propertize name 'face 'agentsmith-workspace-heading)
                 (propertize dir 'face 'agentsmith-path)))
@@ -206,15 +252,17 @@ backend directly (detects externally-started agents)."
       (let ((worktrees (agentsmith-workspace-worktrees workspace)))
         (if worktrees
             (dolist (wt worktrees)
-              (agentsmith--insert-worktree-section wt))
-          (insert (propertize "    No worktrees. Press "  'face 'shadow))
+              (agentsmith--insert-worktree-section wt indent))
+          (insert (propertize (format "%s    No worktrees. Press " indent) 'face 'shadow))
           (insert (propertize "w" 'face 'transient-key))
           (insert (propertize " to add one.\n" 'face 'shadow))))
       (insert "\n"))))
 
-(defun agentsmith--insert-worktree-section (worktree)
-  "Insert a magit section for WORKTREE."
-  (let* ((name (agentsmith-worktree-name worktree))
+(defun agentsmith--insert-worktree-section (worktree &optional indent)
+  "Insert a magit section for WORKTREE.
+Optional INDENT is a string prefix for visual nesting (e.g. in kanban view)."
+  (let* ((indent (or indent ""))
+         (name (agentsmith-worktree-name worktree))
          (path (abbreviate-file-name (agentsmith-worktree-path worktree)))
          (agent (agentsmith-worktree-agent-session worktree))
          (status (agentsmith--get-agent-status
@@ -222,11 +270,313 @@ backend directly (detects externally-started agents)."
          (branch (or (agentsmith-worktree-branch worktree) "")))
     (magit-insert-section (agentsmith-worktree-section worktree)
       (magit-insert-heading
-        (format "    %s %s  %s  %s\n"
+        (format "%s    %s %s  %s  %s\n"
+                indent
                 (agentsmith--status-indicator status)
                 (propertize name 'face 'agentsmith-worktree-name)
                 (propertize branch 'face 'agentsmith-branch)
                 (propertize path 'face 'agentsmith-path))))))
+
+;;; Kanban View Rendering
+
+(defun agentsmith--render-kanban-view ()
+  "Render the kanban column view."
+  (setq agentsmith--kanban-columns (agentsmith-kanban-read))
+  (insert (propertize "AgentSmith" 'face 'magit-section-heading)
+          (propertize "  [kanban]" 'face 'shadow) "\n")
+  (let* ((ws-by-name (make-hash-table :test #'equal))
+         (all-names nil))
+    ;; Build lookup table: workspace name → struct
+    (dolist (ws agentsmith--workspaces)
+      (let ((name (agentsmith-workspace-name ws)))
+        (puthash name ws ws-by-name)
+        (push name all-names)))
+    (setq all-names (nreverse all-names))
+    ;; Render each column
+    (dolist (col agentsmith--kanban-columns)
+      (agentsmith--insert-column-section
+       (car col) (cdr col) ws-by-name))
+    ;; Compute and render Unsorted
+    (let* ((assigned (agentsmith-kanban--all-assigned-names
+                      agentsmith--kanban-columns))
+           (unsorted (cl-remove-if (lambda (n) (member n assigned))
+                                   all-names)))
+      (when unsorted
+        (agentsmith--insert-column-section
+         "Unsorted" unsorted ws-by-name)))))
+
+(defun agentsmith--insert-column-section (name ws-names ws-by-name)
+  "Insert a kanban column section.
+NAME is the column heading.  WS-NAMES is the list of workspace name
+strings.  WS-BY-NAME is a hash table mapping names to workspace structs."
+  (magit-insert-section (agentsmith-column-section name t)
+    (magit-insert-heading
+      (format "%s\n" (propertize name 'face 'agentsmith-column-heading)))
+    (if ws-names
+        (dolist (ws-name ws-names)
+          (let ((ws (gethash ws-name ws-by-name)))
+            (if ws
+                (agentsmith--insert-workspace-section ws "  ")
+              ;; Workspace in kanban.org but not in registry
+              (insert (propertize (format "    ? %s (not registered)\n" ws-name)
+                                  'face 'agentsmith-column-unregistered)))))
+      (insert (propertize "    (empty)\n" 'face 'shadow)))
+    (insert "\n")))
+
+;;; Kanban Interactive Commands
+
+(defun agentsmith--column-at-point ()
+  "Return the column name string at point, or nil."
+  (when-let* ((section (magit-current-section)))
+    (and (agentsmith-column-section-p section)
+         (oref section value))))
+
+(defun agentsmith-buffer-set-view (view)
+  "Set the current view to VIEW and refresh.
+VIEW is `workspaces' or `kanban'."
+  (setq agentsmith--current-view view)
+  (agentsmith-buffer-refresh))
+
+(defun agentsmith-buffer-view-workspaces ()
+  "Switch to the flat workspace list view."
+  (interactive)
+  (agentsmith-buffer-set-view 'workspaces))
+
+(defun agentsmith-buffer-view-kanban ()
+  "Switch to the kanban column view."
+  (interactive)
+  (agentsmith-buffer-set-view 'kanban))
+
+(defun agentsmith-kanban-create-column ()
+  "Create a new kanban column."
+  (interactive)
+  (let* ((name (read-string "Column name: "))
+         (columns (or (agentsmith-kanban-read) nil)))
+    (when (string-empty-p name)
+      (user-error "Column name cannot be empty"))
+    (when (assoc name columns)
+      (user-error "Column '%s' already exists" name))
+    (agentsmith-kanban-write (agentsmith-kanban-add-column columns name))
+    (agentsmith-buffer-refresh)))
+
+(defun agentsmith-kanban-rename-column-at-point ()
+  "Rename the kanban column at point."
+  (interactive)
+  (let ((col-name (agentsmith--column-at-point)))
+    (unless col-name
+      (user-error "No column at point"))
+    (when (string= col-name "Unsorted")
+      (user-error "Cannot rename the Unsorted column"))
+    (let* ((new-name (read-string (format "Rename '%s' to: " col-name)))
+           (columns (agentsmith-kanban-read)))
+      (when (string-empty-p new-name)
+        (user-error "Column name cannot be empty"))
+      (when (assoc new-name columns)
+        (user-error "Column '%s' already exists" new-name))
+      (agentsmith-kanban-write
+       (agentsmith-kanban-rename-column columns col-name new-name))
+      (agentsmith-buffer-refresh))))
+
+(defun agentsmith-kanban-delete-column-at-point ()
+  "Delete the kanban column at point.
+Workspaces in this column become unsorted."
+  (interactive)
+  (let ((col-name (agentsmith--column-at-point)))
+    (unless col-name
+      (user-error "No column at point"))
+    (when (string= col-name "Unsorted")
+      (user-error "Cannot delete the Unsorted column"))
+    (when (yes-or-no-p (format "Delete column '%s'? (workspaces become unsorted) "
+                               col-name))
+      (agentsmith-kanban-write
+       (agentsmith-kanban-remove-column (agentsmith-kanban-read) col-name))
+      (agentsmith-buffer-refresh))))
+
+(defun agentsmith-kanban-move-workspace-at-point ()
+  "Move the workspace at point to a different kanban column."
+  (interactive)
+  (unless (eq agentsmith--current-view 'kanban)
+    (user-error "Only available in kanban view"))
+  (let ((ws (agentsmith--workspace-at-point)))
+    (unless ws
+      (user-error "No workspace at point"))
+    (let* ((columns (or (agentsmith-kanban-read) nil))
+           (col-names (mapcar #'car columns))
+           (ws-name (agentsmith-workspace-name ws))
+           (target (completing-read
+                    (format "Move '%s' to column: " ws-name)
+                    col-names nil t)))
+      (agentsmith-kanban-write
+       (agentsmith-kanban-move-workspace columns ws-name target))
+      (agentsmith-buffer-refresh)
+      (agentsmith--goto-workspace-section ws-name))))
+
+(defun agentsmith-kanban-edit-file ()
+  "Open `agentsmith-kanban-file' in org-mode for manual editing."
+  (interactive)
+  (find-file agentsmith-kanban-file))
+
+(defun agentsmith-kanban-clean ()
+  "Remove workspace names from kanban.org that are not in the registry."
+  (interactive)
+  (let* ((columns (agentsmith-kanban-read))
+         (registered (mapcar #'agentsmith-workspace-name
+                             (agentsmith-workspace-load-all)))
+         (cleaned (mapcar (lambda (col)
+                            (cons (car col)
+                                  (cl-remove-if-not
+                                   (lambda (name) (member name registered))
+                                   (cdr col))))
+                          columns)))
+    (agentsmith-kanban-write cleaned)
+    (when (derived-mode-p 'agentsmith-mode)
+      (agentsmith-buffer-refresh))
+    (message "Kanban cleaned")))
+
+;;; Kanban Point Restoration
+
+(defun agentsmith--goto-workspace-section (ws-name)
+  "Move point to the workspace section for WS-NAME after a refresh."
+  (goto-char (point-min))
+  (cl-labels
+      ((walk (section)
+         (when (and (agentsmith-workspace-section-p section)
+                    (let ((val (oref section value)))
+                      (and (agentsmith-workspace-p val)
+                           (string= (agentsmith-workspace-name val) ws-name))))
+           (goto-char (oref section start))
+           (cl-return-from agentsmith--goto-workspace-section t))
+         (dolist (child (oref section children))
+           (walk child))))
+    (when-let* ((root (magit-current-section)))
+      (walk root))))
+
+(defun agentsmith--goto-column-section (col-name)
+  "Move point to the column section for COL-NAME after a refresh."
+  (goto-char (point-min))
+  (cl-labels
+      ((walk (section)
+         (when (and (agentsmith-column-section-p section)
+                    (equal (oref section value) col-name))
+           (goto-char (oref section start))
+           (cl-return-from agentsmith--goto-column-section t))
+         (dolist (child (oref section children))
+           (walk child))))
+    (when-let* ((root (magit-current-section)))
+      (walk root))))
+
+;;; Kanban Movement Commands
+
+(defun agentsmith-kanban--ensure-kanban-view ()
+  "Signal an error if not in kanban view."
+  (unless (eq agentsmith--current-view 'kanban)
+    (user-error "Only available in kanban view")))
+
+(defun agentsmith-kanban--ws-name-at-point ()
+  "Return the workspace name at point, checking for Unsorted column.
+Signals user-error if workspace is in the Unsorted column."
+  (let ((ws (agentsmith--workspace-at-point)))
+    (unless ws (user-error "No workspace at point"))
+    (let ((ws-name (agentsmith-workspace-name ws))
+          (columns (agentsmith-kanban-read)))
+      (unless (agentsmith-kanban--all-assigned-names columns)
+        ;; All workspaces are unsorted
+        (user-error "Workspace is unsorted; assign to a column first"))
+      (unless (member ws-name (agentsmith-kanban--all-assigned-names columns))
+        (user-error "Workspace is unsorted; assign to a column first"))
+      ws-name)))
+
+(defun agentsmith-kanban-shift-down-at-point ()
+  "Context-sensitive shift down in kanban view.
+On a workspace: shift it down within its column or wrap to next.
+On a column heading: swap the column with the one below."
+  (interactive)
+  (agentsmith-kanban--ensure-kanban-view)
+  (cond
+   ((agentsmith--workspace-at-point)
+    (let* ((ws-name (agentsmith-kanban--ws-name-at-point))
+           (columns (agentsmith-kanban-read))
+           (new-columns (agentsmith-kanban-shift-workspace-down columns ws-name)))
+      (if new-columns
+          (progn
+            (agentsmith-kanban-write new-columns)
+            (agentsmith-buffer-refresh)
+            (agentsmith--goto-workspace-section ws-name))
+        (message "Already at boundary"))))
+   ((agentsmith--column-at-point)
+    (let* ((col-name (agentsmith--column-at-point))
+           (columns (agentsmith-kanban-read)))
+      (when (string= col-name "Unsorted")
+        (user-error "Cannot reorder the Unsorted column"))
+      (let ((new-columns (agentsmith-kanban-shift-column-down columns col-name)))
+        (if new-columns
+            (progn
+              (agentsmith-kanban-write new-columns)
+              (agentsmith-buffer-refresh)
+              (agentsmith--goto-column-section col-name))
+          (message "Already at boundary")))))
+   (t (user-error "No workspace or column at point"))))
+
+(defun agentsmith-kanban-shift-up-at-point ()
+  "Context-sensitive shift up in kanban view.
+On a workspace: shift it up within its column or wrap to previous.
+On a column heading: swap the column with the one above."
+  (interactive)
+  (agentsmith-kanban--ensure-kanban-view)
+  (cond
+   ((agentsmith--workspace-at-point)
+    (let* ((ws-name (agentsmith-kanban--ws-name-at-point))
+           (columns (agentsmith-kanban-read))
+           (new-columns (agentsmith-kanban-shift-workspace-up columns ws-name)))
+      (if new-columns
+          (progn
+            (agentsmith-kanban-write new-columns)
+            (agentsmith-buffer-refresh)
+            (agentsmith--goto-workspace-section ws-name))
+        (message "Already at boundary"))))
+   ((agentsmith--column-at-point)
+    (let* ((col-name (agentsmith--column-at-point))
+           (columns (agentsmith-kanban-read)))
+      (when (string= col-name "Unsorted")
+        (user-error "Cannot reorder the Unsorted column"))
+      (let ((new-columns (agentsmith-kanban-shift-column-up columns col-name)))
+        (if new-columns
+            (progn
+              (agentsmith-kanban-write new-columns)
+              (agentsmith-buffer-refresh)
+              (agentsmith--goto-column-section col-name))
+          (message "Already at boundary")))))
+   (t (user-error "No workspace or column at point"))))
+
+(defun agentsmith-kanban-move-workspace-next-column-at-point ()
+  "Move the workspace at point to the next kanban column."
+  (interactive)
+  (agentsmith-kanban--ensure-kanban-view)
+  (let* ((ws-name (agentsmith-kanban--ws-name-at-point))
+         (columns (agentsmith-kanban-read))
+         (new-columns (agentsmith-kanban-move-workspace-to-next-column
+                       columns ws-name)))
+    (if new-columns
+        (progn
+          (agentsmith-kanban-write new-columns)
+          (agentsmith-buffer-refresh)
+          (agentsmith--goto-workspace-section ws-name))
+      (message "Already at boundary"))))
+
+(defun agentsmith-kanban-move-workspace-prev-column-at-point ()
+  "Move the workspace at point to the previous kanban column."
+  (interactive)
+  (agentsmith-kanban--ensure-kanban-view)
+  (let* ((ws-name (agentsmith-kanban--ws-name-at-point))
+         (columns (agentsmith-kanban-read))
+         (new-columns (agentsmith-kanban-move-workspace-to-prev-column
+                       columns ws-name)))
+    (if new-columns
+        (progn
+          (agentsmith-kanban-write new-columns)
+          (agentsmith-buffer-refresh)
+          (agentsmith--goto-workspace-section ws-name))
+      (message "Already at boundary"))))
 
 ;;; Project Switching
 
@@ -586,6 +936,7 @@ Users can override bindings with `keymap-set'."
   "g"           #'agentsmith-buffer-refresh
   "c"           #'agentsmith-create-workspace
   "i"           #'agentsmith-workspace-import
+  "v"           #'agentsmith-transient-view
   "q"           #'quit-window
   "?"           #'agentsmith-dispatch)
 
@@ -617,12 +968,19 @@ Users can override bindings with `keymap-set'."
     "gr"                 #'agentsmith-buffer-refresh
     "c"                  #'agentsmith-create-workspace
     "i"                  #'agentsmith-workspace-import
+    "v"                  #'agentsmith-transient-view
     (kbd "RET")          #'agentsmith-open-at-point
     (kbd "S-<return>")   #'agentsmith-agent-popup-at-point
     "a"                  #'agentsmith-agent-at-point
     "x"                  #'agentsmith-transient-delete
     "D"                  #'agentsmith-dired-at-point
-    "q"                  #'quit-window)
+    "q"                  #'quit-window
+    ;; Kanban movement (J/K/H/L/m)
+    "J"                  #'agentsmith-kanban-shift-down-at-point
+    "K"                  #'agentsmith-kanban-shift-up-at-point
+    "H"                  #'agentsmith-kanban-move-workspace-prev-column-at-point
+    "L"                  #'agentsmith-kanban-move-workspace-next-column-at-point
+    "m"                  #'agentsmith-kanban-move-workspace-at-point)
   (add-hook 'agentsmith-mode-hook #'evil-normalize-keymaps))
 
 (provide 'agentsmith-buffer)

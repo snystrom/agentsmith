@@ -33,6 +33,9 @@
 (declare-function agentsmith-workspace-scratch-at-point "agentsmith-buffer" ())
 (declare-function agentsmith-workspace-create-plan-at-point "agentsmith-buffer" ())
 (declare-function agentsmith-workspace-find-plan-at-point "agentsmith-buffer" ())
+(declare-function agentsmith-buffer-view-workspaces "agentsmith-buffer" ())
+(declare-function agentsmith-buffer-view-kanban "agentsmith-buffer" ())
+(declare-function agentsmith-kanban-edit-file "agentsmith-buffer" ())
 
 ;;; Dispatch Menu
 
@@ -52,6 +55,8 @@
    ("b" "Show agent buffer" agentsmith-dispatch--show-agent)]
   ["Plans"
    ("p" "Plans menu..."     agentsmith-transient-workspace-plans)]
+  ["View"
+   ("v" "View menu..."      agentsmith-transient-view)]
   ["Buffer"
    ("g" "Refresh"           agentsmith-buffer-refresh)])
 
@@ -268,6 +273,16 @@ Starts a new session with the selected backend."
         (message "Started %s agent for worktree: %s"
                  backend (agentsmith-worktree-name wt)))
     (user-error "No worktree at point")))
+
+;;; View Menu
+
+;;;###autoload (autoload 'agentsmith-transient-view "agentsmith-transient" nil t)
+(transient-define-prefix agentsmith-transient-view ()
+  "Switch between views."
+  ["View"
+   ("w" "Workspaces (flat list)" agentsmith-buffer-view-workspaces)
+   ("k" "Kanban (columns)"       agentsmith-buffer-view-kanban)
+   ("e" "Edit kanban.org"        agentsmith-kanban-edit-file)])
 
 (provide 'agentsmith-transient)
 ;;; agentsmith-transient.el ends here

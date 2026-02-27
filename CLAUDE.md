@@ -4,13 +4,14 @@ Emacs major mode for managing coding agent workflows across projects/repos.
 
 ## Architecture
 
-Six elisp modules, dependency flows downward:
+Seven elisp modules, dependency flows downward:
 
 ```
 agentsmith.el                  -- Entry point, autoloads, M-x agentsmith
   ├── agentsmith-buffer.el     -- magit-section-mode status buffer, keymaps, rendering
   ├── agentsmith-transient.el  -- Transient popup menus (?, a on sections, etc.)
   ├── agentsmith-agent.el      -- Config-based agent backend registry + dispatch
+  ├── agentsmith-kanban.el     -- Kanban column persistence (org file read/write)
   ├── agentsmith-workspace.el  -- Workspace/worktree/session structs, persistence, CRUD
   └── agentsmith-worktree.el   -- VCS detection, git worktree / jj workspace operations
 ```
@@ -52,10 +53,15 @@ All operation functions take a single DIRECTORY argument. Dispatch via `agentsmi
 
 ## Buffer (agentsmith-buffer.el)
 
-Derived from `magit-section-mode`. Three EIEIO section classes (needed because magit hardcodes `magit-TYPENAME-section-map` keymap lookup):
+Derived from `magit-section-mode`. Four EIEIO section classes (needed because magit hardcodes `magit-TYPENAME-section-map` keymap lookup):
 - `agentsmith-root-section`
 - `agentsmith-workspace-section` (keymap: `agentsmith-workspace-section-map`)
 - `agentsmith-worktree-section` (keymap: `agentsmith-worktree-section-map`)
+- `agentsmith-column-section` (keymap: `agentsmith-column-section-map`) — kanban view only
+
+Two views controlled by `agentsmith--current-view` buffer-local var:
+- `workspaces` (default) — flat list of all workspaces
+- `kanban` — workspaces grouped into user-defined columns from `kanban.org`
 
 Status detection falls back to querying the backend's `status` operation when no `agentsmith-agent-session` exists on the struct (handles externally-started agents).
 
@@ -63,9 +69,12 @@ Status detection falls back to querying the backend's `status` operation when no
 
 - `g` — refresh
 - `c` — create workspace
+- `v` — view menu (w=workspaces, k=kanban, e=edit kanban.org)
 - `?` — dispatch transient
-- On workspace: `RET`=open, `a`=agent menu, `w`=add worktree, `d`=delete, `p`=plans menu (p=dired, n=new, f=find, s=scratch)
+- On workspace: `RET`=open, `a`=agent menu, `w`=add worktree, `d`=delete, `p`=plans menu (p=dired, n=new, f=find, s=scratch), `m`=move to column (kanban), `M-n`/`M-p`=shift down/up (kanban)
 - On worktree: `RET`=open, `S-RET`=agent popup, `a`=agent menu, `d`=remove
+- On column (kanban view): `RET`=toggle, `c`=create, `r`=rename, `x`=delete, `m`=move workspace, `M-n`/`M-p`=shift column down/up
+- Evil normal (kanban view): `J`/`K`=shift down/up (workspace or column), `H`/`L`=move workspace to prev/next column, `m`=move workspace to column via completing-read
 
 ## VCS Operations (agentsmith-worktree.el)
 

@@ -63,6 +63,7 @@
 (require 'agentsmith-workspace)
 (require 'agentsmith-worktree)
 (require 'agentsmith-agent)
+(require 'agentsmith-kanban)
 (require 'agentsmith-buffer)
 (require 'agentsmith-transient)
 
