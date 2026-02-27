@@ -65,17 +65,6 @@ Two views controlled by `agentsmith--current-view` buffer-local var:
 
 Status detection falls back to querying the backend's `status` operation when no `agentsmith-agent-session` exists on the struct (handles externally-started agents).
 
-## Key Bindings (buffer mode)
-
-- `g` — refresh
-- `c` — create workspace
-- `v` — view menu (w=workspaces, k=kanban, e=edit kanban.org)
-- `?` — dispatch transient
-- On workspace: `RET`=open, `a`=agent menu, `w`=add worktree, `d`=delete, `p`=plans menu (p=dired, n=new, f=find, s=scratch), `m`=move to column (kanban), `M-n`/`M-p`=shift down/up (kanban)
-- On worktree: `RET`=open, `S-RET`=agent popup, `a`=agent menu, `d`=remove
-- On column (kanban view): `RET`=toggle, `c`=create, `r`=rename, `x`=delete, `m`=move workspace, `M-n`/`M-p`=shift column down/up
-- Evil normal (kanban view): `J`/`K`=shift down/up (workspace or column), `H`/`L`=move workspace to prev/next column, `m`=move workspace to column via completing-read
-
 ## VCS Operations (agentsmith-worktree.el)
 
 Uses `cl-defgeneric` dispatched on VCS symbol (`'git` or `'jj`). Users can add new VCS types by defining `cl-defmethod` implementations.

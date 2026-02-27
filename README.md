@@ -16,7 +16,7 @@ AgentSmith is designed to help with each of these issues:
 - Automatic workspace & worktree creation
 - Management of agents at the workspace and worktree level
 - Helpers for swapping agent sessions within and between workspaces
-- AgentSmith allows registration of custom agent backends so each can be managed with the same helpers
+- Register custom agent backends so each can be managed with the same helpers
 
 ### Workspaces & Worktrees
 
@@ -111,6 +111,24 @@ Doom Emacs
 
 Evil normal-state bindings are set up automatically when evil is loaded. All the above keys work from normal state. `gr` refreshes (standard evil pattern).
 
+### Doom Emacs
+
+I use something kinda like this in my config...
+``` elisp
+(map! :leader
+      :desc "agentsmith"
+      "a a" #'agentsmith
+      "a w" #'agentsmith-workspace-toggle-agent
+      "a W" #'agentsmith-workspace-toggle-agent-and-go
+      "a t" #'agentsmith-worktree-toggle-agent
+      "a T" #'agentsmith-worktree-toggle-agent-and-go
+      "a s" #'agentsmith-workspace-select-worktree-agent
+      "a p" #'agentsmith-workspace-list
+      "a f" #'agentsmith-worktree-find-file
+      "a b" #'agentsmith-workspace-switch-buffer
+      )
+```
+
 ## Configuration
 
 ### Default paths
@@ -197,7 +215,7 @@ The fallback behavior is controlled by function-valued defcustoms, so you can cu
 You can import an existing directory as a workspace with `M-x agentsmith-workspace-import` or `i` in the status buffer. This handles two cases:
 
 1. **Re-registering a soft-deleted workspace**: If the directory has an existing `.agentsmith.el` config (e.g. from a previous workspace that was deregistered), it re-registers it directly.
-2. **Importing a manually-created directory**: If there's no config, AgentSmith scans immediate subdirectories for git/jj repos and builds the workspace config automatically. Imported workspaces are tagged with `(:imported t)` in their metadata.
+2. **Importing a manually-created directory**: If there's no config, AgentSmith scans immediate subdirectories for git/jj repos and builds the workspace config automatically. Imported workspaces are tagged with `(:imported t)` in their metadata. No worktrees are created in the detected repos, we use the existing branch or commit as-is.
 
 ### Deleting workspaces and worktrees
 
