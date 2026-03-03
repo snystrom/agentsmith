@@ -84,6 +84,8 @@ Doom Emacs
 | `M-x agentsmith-workspace-select-worktree-agent` | Select a worktree in the current workspace and open its agent |
 | `M-x agentsmith-worktree-find-file` | Select a worktree, then find a file in it (opens under workspace project) |
 | `M-x agentsmith-workspace-switch-buffer` | Switch to an open buffer belonging to the current workspace |
+| `M-x agentsmith-worktree-open-vcs` | Open VCS interface (magit/jj) for the current worktree (from any buffer) |
+| `M-x agentsmith-workspace-select-worktree-vcs` | Select a worktree and open its VCS interface |
 | `M-x agentsmith-workspace-import` | Import an existing directory as a workspace |
 
 ## Keybindings
@@ -95,6 +97,8 @@ Doom Emacs
 | `RET` | Workspace | Switch to workspace as projectile project |
 | `RET` | Worktree | Switch to worktree as projectile project |
 | `S-RET` | Worktree | Open agent buffer (cascade: show/detect/start) |
+| `V` | Worktree | Open VCS interface (magit, jj mode, etc.) |
+| `V` | Workspace | Open VCS interface for workspace directory |
 | `D` | Any | Open in dired |
 | `a` | Workspace | Workspace agent transient menu |
 | `a` | Worktree | Worktree agent transient menu |
@@ -126,6 +130,7 @@ I use something kinda like this in my config...
       "a p" #'agentsmith-workspace-list
       "a f" #'agentsmith-worktree-find-file
       "a b" #'agentsmith-workspace-switch-buffer
+      "a v" #'agentsmith-workspace-select-worktree-vcs
       )
 ```
 
@@ -173,6 +178,29 @@ To override the open behavior entirely:
       (lambda (ws)
         (dired (agentsmith-workspace-directory ws))))
 ```
+
+### VCS interface
+
+Press `V` on a worktree to open its VCS interface, or use `M-x agentsmith-worktree-open-vcs` from any buffer inside a worktree. The function called is controlled by `agentsmith-worktree-vcs-mode-functions`, an alist mapping VCS symbols to functions.
+
+Git defaults to `magit-status`. Jujutsu has no default — you must configure it:
+
+```elisp
+;; Standard Emacs
+(setq agentsmith-worktree-vcs-mode-functions
+      '((git . magit-status)
+        (jj  . jj-log)))
+```
+
+```elisp
+;; Doom Emacs (config.el)
+(after! agentsmith
+  (setq agentsmith-worktree-vcs-mode-functions
+        '((git . magit-status)
+          (jj  . jj-log))))
+```
+
+To select a worktree and open its VCS interface from anywhere in a workspace, use `M-x agentsmith-workspace-select-worktree-vcs`.
 
 ### Agent popup display
 

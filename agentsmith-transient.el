@@ -36,6 +36,7 @@
 (declare-function agentsmith-buffer-view-workspaces "agentsmith-buffer" ())
 (declare-function agentsmith-buffer-view-kanban "agentsmith-buffer" ())
 (declare-function agentsmith-kanban-edit-file "agentsmith-buffer" ())
+(declare-function agentsmith-vcs-at-point "agentsmith-buffer" ())
 
 ;;; Dispatch Menu
 
@@ -48,7 +49,8 @@
    ("o" "Open workspace"    agentsmith-workspace-open-interactive)
    ("x" "Delete..."         agentsmith-transient-delete)]
   ["Worktree"
-   ("w" "Add worktree"      agentsmith-dispatch--add-worktree)]
+   ("w" "Add worktree"      agentsmith-dispatch--add-worktree)
+   ("V" "Open VCS interface" agentsmith-vcs-at-point)]
   ["Agent"
    ("a" "Start agent"       agentsmith-dispatch--start-agent)
    ("s" "Stop agent"        agentsmith-dispatch--stop-agent)

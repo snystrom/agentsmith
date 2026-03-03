@@ -345,5 +345,50 @@ Calls `projectile-switch-to-buffer' scoped to the workspace directory."
       (user-error "Current directory is not inside a registered workspace"))
     (agentsmith-workspace-find-plan ws)))
 
+;;; VCS Interface Commands
+
+;;;###autoload
+(defun agentsmith-worktree-open-vcs ()
+  "Open the VCS interface for the worktree at `default-directory'.
+Can be called from any buffer. Falls back to opening VCS for
+the directory directly if not inside a registered worktree."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (match (agentsmith-worktree-find-by-directory dir)))
+    (if match
+        (agentsmith--open-vcs-for-worktree (cdr match))
+      (agentsmith--open-vcs-for-directory dir))))
+
+;;;###autoload
+(defun agentsmith-workspace-select-worktree-vcs ()
+  "Select a worktree in the current workspace and open its VCS interface.
+Uses `completing-read' to list all worktrees, then opens the VCS
+mode for the selected worktree.  Can be called from any buffer."
+  (interactive)
+  (let* ((dir (expand-file-name default-directory))
+         (ws (or (car (agentsmith-worktree-find-by-directory dir))
+                 (agentsmith-workspace-find-by-directory dir))))
+    (unless ws
+      (user-error "Current directory is not inside a registered workspace"))
+    (let ((worktrees (agentsmith-workspace-worktrees ws)))
+      (unless worktrees
+        (user-error "Workspace '%s' has no worktrees"
+                    (agentsmith-workspace-name ws)))
+      (let* ((candidates
+              (mapcar (lambda (wt)
+                        (cons (format "%s  [%s]  %s"
+                                      (agentsmith-worktree-name wt)
+                                      (or (agentsmith-worktree-vcs wt) "?")
+                                      (abbreviate-file-name
+                                       (agentsmith-worktree-path wt)))
+                              wt))
+                      worktrees))
+             (choice (completing-read
+                      (format "Open VCS [%s]: "
+                              (agentsmith-workspace-name ws))
+                      candidates nil t))
+             (wt (cdr (assoc choice candidates))))
+        (agentsmith--open-vcs-for-worktree wt)))))
+
 (provide 'agentsmith)
 ;;; agentsmith.el ends here

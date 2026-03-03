@@ -34,6 +34,16 @@
   :type 'string
   :group 'agentsmith-worktree)
 
+(defcustom agentsmith-worktree-vcs-mode-functions
+  '((git . magit-status))
+  "Alist mapping VCS symbols to functions that open a VCS interface.
+Each function is called with no arguments and `default-directory'
+already bound to the worktree path.
+Git defaults to `magit-status'.  Jujutsu has no default; users must
+configure it, e.g.: (jj . my-jj-status-function)"
+  :type '(alist :key-type symbol :value-type function)
+  :group 'agentsmith-worktree)
+
 ;;; VCS Detection
 
 (defun agentsmith-worktree-detect-vcs (repo-path)
@@ -143,6 +153,35 @@ WORKTREE-PATH identifies the workspace. REPO-PATH is the main repo."
        (or (agentsmith-worktree-detect-vcs path)
            ;; Git worktrees have a .git file (not directory) pointing to main repo
            (file-regular-p (expand-file-name ".git" path)))))
+
+;;; VCS Interface
+
+(declare-function projectile-add-known-project "projectile" (project-root))
+
+(defun agentsmith--open-vcs-for-worktree (worktree)
+  "Open the VCS interface for WORKTREE."
+  (let ((vcs (agentsmith-worktree-vcs worktree)))
+    (unless vcs
+      (user-error "No VCS detected for worktree: %s"
+                  (agentsmith-worktree-name worktree)))
+    (agentsmith--open-vcs-for-directory
+     (agentsmith-worktree-path worktree) vcs)))
+
+(defun agentsmith--open-vcs-for-directory (directory &optional vcs)
+  "Open the VCS interface for DIRECTORY.
+VCS is a symbol; if nil, autodetects."
+  (let* ((dir (expand-file-name directory))
+         (vcs (or vcs (agentsmith-worktree-detect-vcs dir)))
+         (fn (alist-get vcs agentsmith-worktree-vcs-mode-functions)))
+    (unless vcs
+      (user-error "No VCS repository found at: %s" dir))
+    (unless fn
+      (user-error "No VCS mode configured for `%s'.  \
+Set `agentsmith-worktree-vcs-mode-functions'" vcs))
+    (when (fboundp 'projectile-add-known-project)
+      (projectile-add-known-project (file-name-as-directory dir)))
+    (let ((default-directory (file-name-as-directory dir)))
+      (funcall fn))))
 
 (provide 'agentsmith-worktree)
 ;;; agentsmith-worktree.el ends here

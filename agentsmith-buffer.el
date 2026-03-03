@@ -143,6 +143,7 @@ Doom Emacs's `ui/workspaces' module."
 Active when point is on a workspace heading."
   "RET"         #'agentsmith-workspace-open-at-point
   "D"           #'agentsmith-workspace-dired-at-point
+  "V"           #'agentsmith-workspace-vcs-at-point
   "a"           #'agentsmith-workspace-agent-at-point
   "w"           #'agentsmith-workspace-add-worktree-at-point
   "x"           #'agentsmith-transient-delete
@@ -156,6 +157,7 @@ Active when point is on a workspace heading."
 Active when point is on a worktree line."
   "RET"         #'agentsmith-worktree-open-at-point
   "D"           #'agentsmith-worktree-dired-at-point
+  "V"           #'agentsmith-worktree-vcs-at-point
   "S-<return>"  #'agentsmith-worktree-agent-popup-at-point
   "a"           #'agentsmith-worktree-agent-at-point
   "x"           #'agentsmith-transient-delete)
@@ -927,6 +929,31 @@ On a workspace, starts or shows the workspace agent."
    ((agentsmith--workspace-at-point) (agentsmith-workspace-dired-at-point))
    (t (user-error "Nothing at point"))))
 
+;;; VCS Commands
+
+(defun agentsmith-worktree-vcs-at-point ()
+  "Open the VCS interface for the worktree at point."
+  (interactive)
+  (if-let* ((wt (agentsmith--worktree-at-point)))
+      (agentsmith--open-vcs-for-worktree wt)
+    (user-error "No worktree at point")))
+
+(defun agentsmith-workspace-vcs-at-point ()
+  "Open the VCS interface for the workspace directory at point."
+  (interactive)
+  (if-let* ((ws (agentsmith--workspace-at-point)))
+      (agentsmith--open-vcs-for-directory
+       (agentsmith-workspace-directory ws))
+    (user-error "No workspace at point")))
+
+(defun agentsmith-vcs-at-point ()
+  "Open the VCS interface for the workspace or worktree at point."
+  (interactive)
+  (cond
+   ((agentsmith--worktree-at-point) (agentsmith-worktree-vcs-at-point))
+   ((agentsmith--workspace-at-point) (agentsmith-workspace-vcs-at-point))
+   (t (user-error "Nothing at point"))))
+
 ;;; Mode Definition
 
 (defvar-keymap agentsmith-mode-map
@@ -974,6 +1001,7 @@ Users can override bindings with `keymap-set'."
     "a"                  #'agentsmith-agent-at-point
     "x"                  #'agentsmith-transient-delete
     "D"                  #'agentsmith-dired-at-point
+    "V"                  #'agentsmith-vcs-at-point
     "q"                  #'quit-window
     ;; Kanban movement (J/K/H/L/m)
     "J"                  #'agentsmith-kanban-shift-down-at-point
