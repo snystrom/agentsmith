@@ -65,10 +65,11 @@ Checks .jj first since jj repos also contain .git."
 VCS is a symbol (\\='git or \\='jj) determining the backend.
 BRANCH is an optional branch/bookmark name (defaults to NAME for git).")
 
-(cl-defgeneric agentsmith-worktree-remove (vcs worktree-path &optional repo-path)
+(cl-defgeneric agentsmith-worktree-remove (vcs worktree-path &optional repo-path name)
   "Remove the worktree at WORKTREE-PATH.
 VCS is a symbol determining the backend.
-REPO-PATH is the original repo path (needed for some VCS operations).")
+REPO-PATH is the original repo path (needed for some VCS operations).
+NAME is the VCS workspace/worktree name (needed for jj forget).")
 
 (cl-defgeneric agentsmith-worktree-branch-info (vcs worktree-path)
   "Return a string describing the current branch/bookmark at WORKTREE-PATH.
@@ -94,7 +95,7 @@ Creates a new branch named BRANCH (or NAME if not specified)."
             (error "Failed to create git worktree at %s" target))))
       target)))
 
-(cl-defmethod agentsmith-worktree-remove ((_vcs (eql git)) worktree-path &optional repo-path)
+(cl-defmethod agentsmith-worktree-remove ((_vcs (eql git)) worktree-path &optional repo-path _name)
   "Remove a git worktree at WORKTREE-PATH."
   (let ((default-directory (expand-file-name (or repo-path worktree-path))))
     (let ((exit-code
@@ -125,11 +126,12 @@ Creates a new branch named BRANCH (or NAME if not specified)."
         (error "Failed to create jj workspace at %s" target))
       target)))
 
-(cl-defmethod agentsmith-worktree-remove ((_vcs (eql jj)) worktree-path &optional repo-path)
+(cl-defmethod agentsmith-worktree-remove ((_vcs (eql jj)) worktree-path &optional repo-path name)
   "Remove a jj workspace.
-WORKTREE-PATH identifies the workspace. REPO-PATH is the main repo."
+WORKTREE-PATH identifies the workspace. REPO-PATH is the main repo.
+NAME is the jj workspace name; falls back to directory basename."
   (let* ((default-directory (expand-file-name (or repo-path worktree-path)))
-         (name (file-name-nondirectory (directory-file-name worktree-path))))
+         (name (or name (file-name-nondirectory (directory-file-name worktree-path)))))
     (let ((exit-code
            (call-process agentsmith-jj-executable nil nil nil
                          "workspace" "forget" name)))

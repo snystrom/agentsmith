@@ -712,7 +712,8 @@ otherwise starts an agent directly."
               (agentsmith-worktree-remove
                (agentsmith-worktree-vcs wt)
                (agentsmith-worktree-path wt)
-               (agentsmith-worktree-source-repo wt))
+               (agentsmith-worktree-source-repo wt)
+               (agentsmith-worktree-branch wt))
             (error (message "Warning: %s" (error-message-string err)))))
         ;; Delete workspace directory from disk
         (delete-directory (agentsmith-workspace-directory ws) t)
@@ -817,7 +818,8 @@ Dispatches to the worktree agent transient if available."
           (agentsmith-worktree-remove
            (agentsmith-worktree-vcs wt)
            (agentsmith-worktree-path wt)
-           (agentsmith-worktree-source-repo wt))
+           (agentsmith-worktree-source-repo wt)
+           (agentsmith-worktree-branch wt))
         (error (message "Warning: failed to remove worktree from disk: %s"
                         (error-message-string err))))
       ;; Remove from workspace struct and save
