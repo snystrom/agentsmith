@@ -304,6 +304,8 @@ Prompts for NAME and DIRECTORY."
 
 (declare-function agentsmith-worktree-detect-vcs "agentsmith-worktree" (repo-path))
 (declare-function agentsmith-worktree-branch-info "agentsmith-worktree" (vcs worktree-path))
+(declare-function agentsmith-worktree-doctor "agentsmith-worktree" (vcs worktree-path &optional repo-path))
+(declare-function agentsmith-worktree-repair "agentsmith-worktree" (vcs worktree-path &optional repo-path))
 (declare-function agentsmith-buffer-refresh "agentsmith-buffer" (&optional _ignore-auto _noconfirm))
 (defvar agentsmith-buffer-name)
 (defvar agentsmith--workspaces)
@@ -316,30 +318,240 @@ Prompts for NAME and DIRECTORY."
       (push workspace agentsmith--workspaces)
       (agentsmith-buffer-refresh))))
 
-(defun agentsmith-workspace-import (name directory)
+(defun agentsmith-workspace--dir= (a b)
+  "Return non-nil if directory paths A and B refer to the same directory.
+Normalizes via `expand-file-name' and `file-name-as-directory'."
+  (string= (file-name-as-directory (expand-file-name a))
+           (file-name-as-directory (expand-file-name b))))
+
+(defun agentsmith-workspace--diagnose (ws actual-dir)
+  "Return a list of issue plists for workspace WS located at ACTUAL-DIR.
+Compares the struct's stored `:directory' against ACTUAL-DIR and runs
+`agentsmith-worktree-doctor' on each worktree.  Does not load from
+disk -- callers must provide the already-loaded workspace struct."
+  (let (issues)
+    (unless (agentsmith-workspace--dir= (agentsmith-workspace-directory ws)
+                                        actual-dir)
+      (push (list :type 'directory-mismatch
+                  :stored (agentsmith-workspace-directory ws)
+                  :actual actual-dir)
+            issues))
+    (dolist (wt (agentsmith-workspace-worktrees ws))
+      (when-let* ((vcs (agentsmith-worktree-vcs wt))
+                  (wt-issues (agentsmith-worktree-doctor
+                              vcs
+                              (agentsmith-worktree-path wt)
+                              (agentsmith-worktree-source-repo wt))))
+        (push (list :type 'worktree
+                    :name (agentsmith-worktree-name wt)
+                    :issues wt-issues)
+              issues)))
+    (nreverse issues)))
+
+(defun agentsmith-workspace-doctor (directory)
+  "Return a list of issue plists for the workspace at DIRECTORY.
+
+Loads the .agentsmith.el config in DIRECTORY and reports problems.
+Known issue types:
+  `directory-mismatch' -- stored `:directory' differs from DIRECTORY
+                          (fields: :stored, :actual)
+  `worktree'           -- a worktree has issues (fields: :name, :issues)
+                          where :issues is a list from
+                          `agentsmith-worktree-doctor'
+
+An empty list means the workspace is healthy.  When called
+interactively, issues are displayed in the *agentsmith-doctor*
+buffer."
+  (interactive (list (read-directory-name "Diagnose workspace directory: ")))
+  (let* ((dir (expand-file-name directory))
+         (config-file (expand-file-name agentsmith-workspace--config-file dir)))
+    (unless (file-readable-p config-file)
+      (user-error "No agentsmith config found in: %s" dir))
+    (let* ((ws (agentsmith-workspace-load dir))
+           (issues (agentsmith-workspace--diagnose ws dir)))
+      (when (called-interactively-p 'interactive)
+        (agentsmith-workspace--doctor-display ws issues))
+      issues)))
+
+(defun agentsmith-workspace--doctor-display (ws issues)
+  "Display ISSUES from `agentsmith-workspace-doctor' for workspace WS."
+  (if (null issues)
+      (message "Workspace %s: no issues found"
+               (agentsmith-workspace-name ws))
+    (let ((buf (get-buffer-create "*agentsmith-doctor*")))
+      (with-current-buffer buf
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert (format "Workspace: %s\n" (agentsmith-workspace-name ws)))
+          (insert (format "Directory: %s\n\n"
+                          (agentsmith-workspace-directory ws)))
+          (dolist (issue issues)
+            (pcase (plist-get issue :type)
+              ('directory-mismatch
+               (insert (format "* directory-mismatch\n    stored: %s\n    actual: %s\n"
+                               (plist-get issue :stored)
+                               (plist-get issue :actual))))
+              ('worktree
+               (insert (format "* worktree: %s\n" (plist-get issue :name)))
+               (dolist (wi (plist-get issue :issues))
+                 (insert (format "    - %s" (plist-get wi :type)))
+                 (let ((extras (cl-loop for (k v) on wi by #'cddr
+                                        unless (eq k :type)
+                                        collect (format "%s=%s" k v))))
+                   (when extras
+                     (insert " (" (mapconcat #'identity extras ", ") ")")))
+                 (insert "\n"))))))
+        (goto-char (point-min))
+        (special-mode))
+      (display-buffer buf))))
+
+(defun agentsmith-workspace--worktree-needs-rewrite-p (wt-issues)
+  "Return non-nil if WT-ISSUES indicates the worktree path should be rewritten."
+  (cl-some (lambda (i) (memq (plist-get i :type) '(path-missing vcs-broken)))
+           wt-issues))
+
+(defun agentsmith-workspace--worktree-has-issue-p (type wt-issues)
+  "Return non-nil if WT-ISSUES contains an issue of TYPE."
+  (cl-some (lambda (i) (eq (plist-get i :type) type)) wt-issues))
+
+(defun agentsmith-workspace-repair (directory)
+  "Repair the workspace at DIRECTORY based on `agentsmith-workspace-doctor'.
+
+Applies these fixes:
+  - Stale `:directory' gets rewritten to DIRECTORY.
+  - For each worktree whose path looks broken (missing on disk, or VCS
+    metadata unusable), rewrites `:path' to DIRECTORY/<basename> and
+    calls `agentsmith-worktree-repair' to fix VCS metadata.
+  - Updates the global registry (adds DIRECTORY, drops the old path).
+
+Failures in per-worktree VCS repair (e.g. jj, which upstream does not
+support) are reported but do not abort the overall repair.  Missing
+source-repo paths are reported but not auto-fixed.  After all repairs,
+re-diagnoses the workspace to verify the outcome."
+  (interactive (list (read-directory-name "Repaired workspace directory: ")))
+  (let* ((new-dir (expand-file-name directory))
+         (config-file (expand-file-name agentsmith-workspace--config-file new-dir)))
+    (unless (file-readable-p config-file)
+      (user-error "No agentsmith config found in: %s" new-dir))
+    (let* ((ws (agentsmith-workspace-load new-dir))
+           (old-dir (agentsmith-workspace-directory ws))
+           (issues (agentsmith-workspace--diagnose ws new-dir))
+           (dir-mismatch (not (agentsmith-workspace--dir= old-dir new-dir))))
+      (if (null issues)
+          (progn
+            (agentsmith-workspace-register new-dir)
+            (agentsmith-workspace--refresh-buffer ws)
+            (message "Workspace %s: no issues found"
+                     (agentsmith-workspace-name ws))
+            ws)
+        (when dir-mismatch
+          (setf (agentsmith-workspace-directory ws) new-dir))
+        ;; Rewrite :path only for worktrees that look broken.
+        ;; Build an alist of worktree-name → doctor issues for the VCS
+        ;; repair pass to consult.
+        (let (wt-issue-alist)
+          (dolist (issue issues)
+            (when (eq (plist-get issue :type) 'worktree)
+              (let* ((wt-name (plist-get issue :name))
+                     (wt-issues (plist-get issue :issues))
+                     (wt (cl-find wt-name (agentsmith-workspace-worktrees ws)
+                                  :key #'agentsmith-worktree-name
+                                  :test #'string=)))
+                (when wt
+                  (push (cons wt-name wt-issues) wt-issue-alist)
+                  (when (agentsmith-workspace--worktree-needs-rewrite-p wt-issues)
+                    (let ((basename (file-name-nondirectory
+                                     (directory-file-name
+                                      (agentsmith-worktree-path wt)))))
+                      (setf (agentsmith-worktree-path wt)
+                            (expand-file-name basename new-dir))))))))
+          ;; VCS repair pass.  Skip worktrees whose source-repo is
+          ;; missing (repair would fail on the missing path anyway).
+          (let (unfixable)
+            (dolist (wt (agentsmith-workspace-worktrees ws))
+              (when-let* ((vcs (agentsmith-worktree-vcs wt))
+                          (wt-doctor (cdr (assoc (agentsmith-worktree-name wt)
+                                                 wt-issue-alist))))
+                (if (agentsmith-workspace--worktree-has-issue-p
+                     'source-repo-missing wt-doctor)
+                    (push (cons (agentsmith-worktree-name wt)
+                                (format "source repo missing: %s"
+                                        (agentsmith-worktree-source-repo wt)))
+                          unfixable)
+                  (condition-case err
+                      (agentsmith-worktree-repair
+                       vcs
+                       (agentsmith-worktree-path wt)
+                       (agentsmith-worktree-source-repo wt))
+                    (error (push (cons (agentsmith-worktree-name wt)
+                                       (error-message-string err))
+                                 unfixable))))))
+            (agentsmith-workspace-save ws)
+            (agentsmith-workspace-register new-dir)
+            (when dir-mismatch
+              (agentsmith-workspace-deregister old-dir))
+            (when (fboundp 'projectile-add-known-project)
+              (projectile-add-known-project new-dir))
+            (agentsmith-workspace--refresh-buffer ws)
+            ;; Re-diagnose to verify the outcome.
+            (let ((remaining (agentsmith-workspace--diagnose ws new-dir)))
+              (cond
+               (unfixable
+                (message "Repaired workspace %s; %d issue(s) remain: %s"
+                         (agentsmith-workspace-name ws)
+                         (length unfixable)
+                         (mapconcat (lambda (c) (format "%s (%s)" (car c) (cdr c)))
+                                    unfixable "; ")))
+               (remaining
+                (message "Repaired workspace %s; %d issue(s) still detected"
+                         (agentsmith-workspace-name ws)
+                         (length remaining)))
+               (t
+                (message "Repaired workspace: %s"
+                         (agentsmith-workspace-name ws)))))
+            ws))))))
+
+(defun agentsmith-workspace-import (directory &optional name)
   "Import an existing directory as an agentsmith workspace.
 If DIRECTORY already has an .agentsmith.el config, re-registers it.
-Otherwise scans for git/jj repos in subdirectories and creates the config.
-Imported workspaces get metadata (:imported t)."
+If the config's stored `:directory' differs from DIRECTORY (because
+the workspace was moved on disk), delegates to
+`agentsmith-workspace-repair' to rewrite paths and repair VCS state.
+Otherwise scans for git/jj repos in subdirectories and creates the
+config.  NAME is only used for the fresh-scan case; when a config
+already exists the persisted name is kept.  Imported workspaces get
+metadata (:imported t)."
   (interactive
    (let* ((dir (read-directory-name "Import workspace directory: "))
-          (name (read-string "Workspace name: "
-                             (file-name-nondirectory
-                              (directory-file-name dir)))))
-     (list name dir)))
+          (config-file (expand-file-name agentsmith-workspace--config-file dir))
+          (name (unless (file-readable-p config-file)
+                  (read-string "Workspace name: "
+                               (file-name-nondirectory
+                                (directory-file-name dir))))))
+     (list dir name)))
   (let* ((dir (expand-file-name directory))
          (config-file (expand-file-name agentsmith-workspace--config-file dir)))
     (if (file-readable-p config-file)
-        ;; Re-register existing config
-        (let ((ws (agentsmith-workspace-load dir)))
-          (agentsmith-workspace-register dir)
-          (when (fboundp 'projectile-add-known-project)
-            (projectile-add-known-project dir))
-          (agentsmith-workspace--refresh-buffer ws)
-          (message "Re-registered workspace: %s" (agentsmith-workspace-name ws))
-          ws)
+        (let* ((ws-peek (agentsmith-workspace-load dir))
+               (stored-dir (agentsmith-workspace-directory ws-peek)))
+          (if (agentsmith-workspace--dir= stored-dir dir)
+              ;; Re-register existing config as-is.
+              (let ((ws ws-peek))
+                (agentsmith-workspace-register dir)
+                (when (fboundp 'projectile-add-known-project)
+                  (projectile-add-known-project dir))
+                (agentsmith-workspace--refresh-buffer ws)
+                (message "Re-registered workspace: %s"
+                         (agentsmith-workspace-name ws))
+                ws)
+            ;; Directory mismatch -- workspace was moved.  Delegate.
+            (agentsmith-workspace-repair dir)))
       ;; Scan subdirectories for repos
-      (let ((worktrees nil))
+      (let ((worktrees nil)
+            (name (or name
+                      (read-string "Workspace name: "
+                                   (file-name-nondirectory
+                                    (directory-file-name dir))))))
         (dolist (subdir (directory-files dir t "\\`[^.]"))
           (when (file-directory-p subdir)
             (when-let* ((vcs (agentsmith-worktree-detect-vcs subdir)))

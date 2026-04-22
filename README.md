@@ -87,6 +87,8 @@ Doom Emacs
 | `M-x agentsmith-worktree-open-vcs` | Open VCS interface (magit/jj) for the current worktree (from any buffer) |
 | `M-x agentsmith-workspace-select-worktree-vcs` | Select a worktree and open its VCS interface |
 | `M-x agentsmith-workspace-import` | Import an existing directory as a workspace |
+| `M-x agentsmith-workspace-doctor` | Diagnose a workspace and report any issues |
+| `M-x agentsmith-workspace-repair` | Repair a workspace that has been moved on disk |
 
 ## Keybindings
 
@@ -240,10 +242,31 @@ The fallback behavior is controlled by function-valued defcustoms, so you can cu
 
 ### Importing workspaces
 
-You can import an existing directory as a workspace with `M-x agentsmith-workspace-import` or `i` in the status buffer. This handles two cases:
+You can import an existing directory as a workspace with `M-x agentsmith-workspace-import` or `i` in the status buffer. This handles three cases:
 
 1. **Re-registering a soft-deleted workspace**: If the directory has an existing `.agentsmith.el` config (e.g. from a previous workspace that was deregistered), it re-registers it directly.
-2. **Importing a manually-created directory**: If there's no config, AgentSmith scans immediate subdirectories for git/jj repos and builds the workspace config automatically. Imported workspaces are tagged with `(:imported t)` in their metadata. No worktrees are created in the detected repos, we use the existing branch or commit as-is.
+2. **Re-importing a moved workspace**: If the config's stored `:directory` differs from the directory being imported (because the workspace was relocated on disk), AgentSmith delegates to `agentsmith-workspace-repair` — see [Repairing a moved workspace](#repairing-a-moved-workspace).
+3. **Importing a manually-created directory**: If there's no config, AgentSmith scans immediate subdirectories for git/jj repos and builds the workspace config automatically. Imported workspaces are tagged with `(:imported t)` in their metadata. No worktrees are created in the detected repos, we use the existing branch or commit as-is.
+
+### Repairing a moved workspace
+
+If you move a workspace directory on disk (e.g. `~/projects/my-workspace/` → `~/workspaces/my-workspace/`), the `.agentsmith.el` config and the git worktrees inside still point at the old location. AgentSmith provides a diagnose/repair pair to fix this up.
+
+- **`M-x agentsmith-workspace-doctor`** — prompts for a workspace directory and reports any issues without making changes. Issue types include:
+  - `directory-mismatch` — the stored `:directory` differs from where `.agentsmith.el` actually lives
+  - `path-missing` — a worktree's recorded `:path` no longer exists
+  - `vcs-broken` — VCS metadata is unusable (e.g. stale gitdir pointer)
+  - `source-repo-missing` — a worktree's `:source-repo` no longer exists on disk
+
+- **`M-x agentsmith-workspace-repair`** — runs `doctor`, then:
+  - Rewrites the workspace `:directory` to the current location.
+  - For each broken worktree, rewrites `:path` to `<workspace-dir>/<basename>` and runs `git worktree repair` from the source repo to fix the gitdir pointers on both sides.
+  - Updates the global registry (adds the new path, drops the old one).
+  - Reports any issues it couldn't auto-fix (e.g. missing source repos) without aborting.
+
+Invoking `agentsmith-workspace-import` on a moved workspace delegates to `agentsmith-workspace-repair` automatically when it detects a directory mismatch, so re-import is usually all you need.
+
+**jj caveat:** moving a jj workspace is officially [unsupported upstream](https://github.com/jj-vcs/jj/issues/7113). AgentSmith's repair for jj worktrees will signal an error; other worktrees in the same workspace still get repaired. Until jj adds support, moved jj workspaces need to be re-created manually (`jj workspace forget` + `jj workspace add` at the new location).
 
 ### Deleting workspaces and worktrees
 
