@@ -311,10 +311,16 @@ Prompts for NAME and DIRECTORY."
 (defvar agentsmith--workspaces)
 
 (defun agentsmith-workspace--refresh-buffer (workspace)
-  "Add WORKSPACE to the buffer state and refresh if the buffer exists."
+  "Add or replace WORKSPACE in the buffer state and refresh if the buffer exists.
+Removes any existing entry whose name matches before pushing."
   (when-let* ((buf (and (boundp 'agentsmith-buffer-name)
                         (get-buffer agentsmith-buffer-name))))
     (with-current-buffer buf
+      (setq agentsmith--workspaces
+            (cl-remove (agentsmith-workspace-name workspace)
+                       agentsmith--workspaces
+                       :key #'agentsmith-workspace-name
+                       :test #'string=))
       (push workspace agentsmith--workspaces)
       (agentsmith-buffer-refresh))))
 
