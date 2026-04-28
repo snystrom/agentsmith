@@ -37,14 +37,16 @@ Three `cl-defstruct`s:
 (defvar agentsmith-agent-configs
   `((claude-code-ide
      (name          . "Claude Code IDE")
-     (start         . agentsmith--claude-code-ide-start)   ; fn(directory)
+     (start         . agentsmith--claude-code-ide-start)   ; fn(directory) — start process
      (stop          . agentsmith--claude-code-ide-stop)
-     (open          . agentsmith--claude-code-ide-start)   ; same fn, it toggles
+     (open          . agentsmith--claude-code-ide-open)    ; fn(directory) — start + show, idempotent
      (detect-buffer . agentsmith--claude-code-ide-detect-buffer)
      (status        . agentsmith--claude-code-ide-status))))
 ```
 
 All operation functions take a single DIRECTORY argument. Dispatch via `agentsmith-agent--call` which sets `default-directory` then `funcall`s.
+
+`open` is optional. When provided, agentsmith routes user-facing "show the agent" requests through it so the backend's own window rules (e.g. `claude-code-ide-use-side-window`) win, rather than wrapping the buffer with `agentsmith-agent-popup-function`. When omitted, agentsmith falls back to `start` followed by `agentsmith-agent-popup-function`.
 
 ### claude-code-ide integration gotchas
 

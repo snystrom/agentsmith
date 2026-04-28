@@ -75,7 +75,7 @@ Called with a single DIRECTORY argument.  Like
      (name          . "Claude Code IDE")
      (start         . agentsmith--claude-code-ide-start)
      (stop          . agentsmith--claude-code-ide-stop)
-     (open          . agentsmith--claude-code-ide-start)  ; same fn — it toggles
+     (open          . agentsmith--claude-code-ide-open)
      (detect-buffer . agentsmith--claude-code-ide-detect-buffer)
      (status        . agentsmith--claude-code-ide-status)))
   "Alist of agent backend configurations.
@@ -87,11 +87,18 @@ path).  This keeps configs decoupled from agentsmith internals.
 
 Required operations:
   name          - string, display name for the backend
-  start         - fn(directory), start the agent in DIRECTORY
+  start         - fn(directory), start the agent process in DIRECTORY.
+                  May be silent; makes no promise about window display.
   stop          - fn(directory), stop the agent in DIRECTORY
-  open          - fn(directory), open/focus agent for DIRECTORY
   detect-buffer - fn(directory) -> buffer-or-nil, find existing agent buffer
-  status        - fn(directory) -> symbol, one of \\='stopped \\='ready \\='thinking")
+  status        - fn(directory) -> symbol, one of \\='stopped \\='ready \\='thinking
+
+Optional operations:
+  open          - fn(directory), ensure the agent is running and its
+                  buffer is visible, using the backend's native display
+                  logic.  Idempotent: a no-op when already visible.
+                  When omitted, agentsmith falls back to calling `start'
+                  followed by `agentsmith-agent-popup-function'.")
 
 ;;; Config Lookup
 
@@ -114,6 +121,22 @@ DIRECTORY is the working directory for the operation."
 (defun agentsmith-agent--config-name (backend)
   "Return the display name for BACKEND."
   (alist-get 'name (agentsmith-agent--get-config backend)))
+
+(defun agentsmith-agent--open-or-popup (backend directory &optional buffer)
+  "Show the agent for DIRECTORY using BACKEND's `open' op if available.
+Falls back to `agentsmith-agent-popup-function' on BUFFER otherwise.
+Returns non-nil when display was handled."
+  (let* ((config (agentsmith-agent--get-config backend))
+         (open-fn (alist-get 'open config)))
+    (cond
+     (open-fn
+      (let ((default-directory (file-name-as-directory
+                                (expand-file-name directory))))
+        (funcall open-fn default-directory))
+      t)
+     ((and buffer (buffer-live-p buffer))
+      (funcall agentsmith-agent-popup-function buffer)
+      t))))
 
 ;;; Default Popup Display
 
@@ -186,19 +209,20 @@ Sets the agent-session slot on WORKSPACE.  Returns the session."
     (setf (agentsmith-agent-session-buffer session) nil)))
 
 (defun agentsmith-agent-show-buffer (session)
-  "Display the agent buffer for SESSION using `agentsmith-agent-popup-function'."
+  "Display the agent buffer for SESSION.
+Uses the backend's `open' operation when available (so the backend's
+native display rules — e.g. `claude-code-ide-use-side-window' — are
+respected), otherwise falls back to `agentsmith-agent-popup-function'."
   (let* ((backend (agentsmith-agent-session-backend session))
          (dir (agentsmith-agent-session-worktree-path session))
          (buf (or (let ((b (agentsmith-agent-session-buffer session)))
                     (and b (buffer-live-p b) b))
-                  ;; Re-detect in case buffer was recreated or not tracked
                   (agentsmith-agent--call backend 'detect-buffer dir))))
-    ;; Update the session's buffer slot
     (when buf
       (setf (agentsmith-agent-session-buffer session) buf))
-    (if (and buf (buffer-live-p buf))
-        (funcall agentsmith-agent-popup-function buf)
-      (user-error "No agent buffer found"))))
+    (let ((handled (agentsmith-agent--open-or-popup backend dir buf)))
+      (unless handled
+        (user-error "No agent buffer found")))))
 
 (defun agentsmith-agent-detect-buffer-for-dir (directory &optional backend)
   "Try to detect an existing agent buffer for DIRECTORY.
@@ -243,10 +267,11 @@ leaving the caller to show or start it."
      (session
       (agentsmith-agent-show-buffer session))
      ;; 2. Auto-detect externally started buffer
-     ((let ((buf (agentsmith-agent-detect-buffer-for-dir
-                  (agentsmith-worktree-path worktree))))
+     ((let* ((dir (agentsmith-worktree-path worktree))
+             (backend agentsmith-default-agent-backend)
+             (buf (agentsmith-agent-detect-buffer-for-dir dir backend)))
         (when (and buf (buffer-live-p buf))
-          (funcall agentsmith-agent-popup-function buf)
+          (agentsmith-agent--open-or-popup backend dir buf)
           t)))
      ;; 3. Nothing found — start a new agent and show it
      (t
@@ -266,15 +291,27 @@ Shows existing session buffer or starts a new one."
 (defun agentsmith-agent-popup-for-directory (directory &optional backend)
   "Show/start agent for DIRECTORY using cascading detection.
 BACKEND defaults to `agentsmith-default-agent-backend'.
-Used as fallback when DIRECTORY is not inside a registered workspace."
-  (let ((backend (or backend agentsmith-default-agent-backend)))
-    (if-let* ((buf (agentsmith-agent-detect-buffer-for-dir directory backend))
-              (_live (buffer-live-p buf)))
-        (funcall agentsmith-agent-popup-function buf)
-      ;; No existing buffer — start the agent
+Used as fallback when DIRECTORY is not inside a registered workspace.
+Routes display through the backend's `open' op when available so that
+backend-native window rules (e.g. `claude-code-ide-use-side-window')
+are respected; otherwise falls back to `start' plus
+`agentsmith-agent-popup-function'."
+  (let* ((backend (or backend agentsmith-default-agent-backend))
+         (config (agentsmith-agent--get-config backend)))
+    (cond
+     ;; Backend supplies `open' — one call handles start + display.
+     ((alist-get 'open config)
+      (agentsmith-agent--open-or-popup backend directory))
+     ;; Existing buffer — display via popup-function.
+     ((let ((buf (agentsmith-agent-detect-buffer-for-dir directory backend)))
+        (when (and buf (buffer-live-p buf))
+          (funcall agentsmith-agent-popup-function buf)
+          t)))
+     ;; No buffer — fall back to legacy start + popup-function.
+     (t
       (agentsmith-agent--call backend 'start directory)
       (when-let* ((buf (agentsmith-agent--call backend 'detect-buffer directory)))
-        (funcall agentsmith-agent-popup-function buf)))))
+        (funcall agentsmith-agent-popup-function buf))))))
 
 (defun agentsmith-agent-toggle-for-directory (directory)
   "Toggle agent for DIRECTORY using the default backend.
@@ -318,6 +355,19 @@ Uses `default-directory' which is set by the dispatch caller."
     (if (fboundp 'claude-code-ide)
         (claude-code-ide)
       (user-error "claude-code-ide is not installed"))))
+
+(defun agentsmith--claude-code-ide-open (directory)
+  "Ensure claude-code-ide for DIRECTORY is running and visible.
+Idempotent: if its buffer is already shown in some window, do nothing
+\(avoids `claude-code-ide' toggling it back off).  Otherwise invoke
+`claude-code-ide', which respects the user's
+`claude-code-ide-use-side-window' and related display settings."
+  (let ((default-directory (file-name-as-directory (expand-file-name directory))))
+    (if-let* ((buf (agentsmith--claude-code-ide-detect-buffer directory))
+              (win (get-buffer-window buf t)))
+        nil
+      (when (fboundp 'claude-code-ide)
+        (claude-code-ide)))))
 
 (defun agentsmith--claude-code-ide-stop (directory)
   "Stop the claude-code-ide session in DIRECTORY."
