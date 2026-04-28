@@ -325,8 +325,7 @@ Removes any existing entry whose name matches before pushing."
       (agentsmith-buffer-refresh))))
 
 (defun agentsmith-workspace--dir= (a b)
-  "Return non-nil if directory paths A and B refer to the same directory.
-Normalizes via `expand-file-name' and `file-name-as-directory'."
+  "Return non-nil if directory paths A and B refer to the same directory."
   (string= (file-name-as-directory (expand-file-name a))
            (file-name-as-directory (expand-file-name b))))
 
