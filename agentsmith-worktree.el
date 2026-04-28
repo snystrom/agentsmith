@@ -75,6 +75,21 @@ NAME is the VCS workspace/worktree name (needed for jj forget).")
   "Return a string describing the current branch/bookmark at WORKTREE-PATH.
 VCS is a symbol determining the backend.")
 
+(cl-defgeneric agentsmith-worktree-doctor (vcs worktree-path &optional repo-path)
+  "Return a list of issue plists for the worktree at WORKTREE-PATH.
+Each plist has a `:type' key and optional extra fields.  Known types:
+  `path-missing'        -- WORKTREE-PATH does not exist on disk
+  `source-repo-missing' -- REPO-PATH is non-nil but does not exist
+  `vcs-broken'          -- VCS metadata is invalid (stale pointers, etc.)
+An empty list means the worktree is healthy.")
+
+(cl-defgeneric agentsmith-worktree-repair (vcs worktree-path &optional repo-path)
+  "Repair VCS metadata for a worktree that has been moved to WORKTREE-PATH.
+VCS is a symbol determining the backend.
+REPO-PATH is the source repo, needed by backends that repair from the
+main repo side (e.g. git).  Signals an error for backends that do not
+support repair (e.g. jj).")
+
 ;;; Git Implementation
 
 (cl-defmethod agentsmith-worktree-create ((_vcs (eql git)) repo-path target-dir name &optional branch)
@@ -113,6 +128,35 @@ Creates a new branch named BRANCH (or NAME if not specified)."
          (call-process agentsmith-git-executable nil t nil
                        "rev-parse" "--abbrev-ref" "HEAD"))))))
 
+(cl-defmethod agentsmith-worktree-doctor ((_vcs (eql git)) worktree-path &optional repo-path)
+  "Diagnose a git worktree at WORKTREE-PATH."
+  (let (issues)
+    (cond
+     ((not (file-directory-p worktree-path))
+      (push (list :type 'path-missing :path worktree-path) issues))
+     ((not (zerop (let ((default-directory (expand-file-name worktree-path)))
+                    (call-process agentsmith-git-executable nil nil nil
+                                  "rev-parse" "--git-dir"))))
+      (push (list :type 'vcs-broken :path worktree-path :vcs 'git) issues)))
+    (when (and repo-path (not (file-directory-p repo-path)))
+      (push (list :type 'source-repo-missing :source-repo repo-path) issues))
+    (nreverse issues)))
+
+(cl-defmethod agentsmith-worktree-repair ((_vcs (eql git)) worktree-path &optional repo-path)
+  "Repair a git worktree after it has been moved to WORKTREE-PATH.
+Runs `git worktree repair WORKTREE-PATH' from REPO-PATH, which fixes
+both the worktree's .git pointer and the source repo's gitdir entry."
+  (unless repo-path
+    (error "Cannot repair git worktree without a source repo path"))
+  (unless (file-directory-p repo-path)
+    (error "Source repo does not exist: %s" repo-path))
+  (let ((default-directory (expand-file-name repo-path)))
+    (let ((exit-code
+           (call-process agentsmith-git-executable nil nil nil
+                         "worktree" "repair" (expand-file-name worktree-path))))
+      (unless (zerop exit-code)
+        (error "Failed to repair git worktree at %s" worktree-path)))))
+
 ;;; Jujutsu Implementation
 
 (cl-defmethod agentsmith-worktree-create ((_vcs (eql jj)) repo-path target-dir name &optional _branch)
@@ -146,6 +190,28 @@ NAME is the jj workspace name; falls back to directory basename."
        (with-current-buffer standard-output
          (call-process agentsmith-jj-executable nil t nil
                        "log" "-r" "@" "--no-graph" "-T" "bookmarks"))))))
+
+(cl-defmethod agentsmith-worktree-doctor ((_vcs (eql jj)) worktree-path &optional repo-path)
+  "Diagnose a jj workspace at WORKTREE-PATH."
+  (let (issues)
+    (cond
+     ((not (file-directory-p worktree-path))
+      (push (list :type 'path-missing :path worktree-path) issues))
+     ((not (zerop (let ((default-directory (expand-file-name worktree-path)))
+                    (call-process agentsmith-jj-executable nil nil nil
+                                  "workspace" "root"))))
+      (push (list :type 'vcs-broken :path worktree-path :vcs 'jj) issues)))
+    (when (and repo-path (not (file-directory-p repo-path)))
+      (push (list :type 'source-repo-missing :source-repo repo-path) issues))
+    (nreverse issues)))
+
+(cl-defmethod agentsmith-worktree-repair ((_vcs (eql jj)) worktree-path &optional _repo-path)
+  "Signal an error: jj does not support repairing a moved workspace.
+See https://github.com/jj-vcs/jj/issues/7113 for the upstream feature
+request.  Move is officially unsupported; the workspace must be
+recreated with `jj workspace add' at the new location."
+  (error "jj does not support repairing a moved workspace at %s \
+(see jj-vcs/jj#7113)" worktree-path))
 
 ;;; Utility
 
