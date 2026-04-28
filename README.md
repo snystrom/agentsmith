@@ -301,22 +301,46 @@ Add custom actions to the dispatch menu:
   '("x" "My custom action" my-custom-command))
 ```
 
-### Switching to already-open projects
+### Perspectives and workspaces
 
-By default, if a project already has file-visiting buffers open, `RET` switches to the most recent buffer instead of showing the file finder. Customize this with `agentsmith-switch-to-existing-project-function` — it receives the project directory and should return non-nil if it handled the switch.
+When you press `RET` on a worktree, AgentSmith treats the **workspace** as the project for perspective/workspace-tab purposes — so `persp-projectile`, Doom workspaces, etc. name the perspective after the workspace rather than the worktree. This avoids cross-workspace collisions when two workspaces contain worktrees with the same basename. The find-file prompt that follows is still scoped to the worktree you clicked.
+
+Workspace dirs aren't real projectile projects (no `.git` / `.projectile` marker — by design, otherwise every tool that walks up looking for a project root would resolve worktrees up to the workspace). Because of that, the projectile-based bridges in `persp-projectile` and Doom's `+workspaces` module don't fire on their own. AgentSmith provides two defcustoms to wire the perspective handoff explicitly:
+
+- `agentsmith-switch-to-existing-project-function` — runs first; if it returns non-nil ("project is already open"), the find-file step is skipped.
+- `agentsmith-create-project-function` — runs next on first-open; creates and switches to the perspective/workspace tab.
+
+Configure both as a matched pair:
+
+```elisp
+;; Doom Emacs workspaces
+(setq agentsmith-switch-to-existing-project-function
+      #'agentsmith-switch-to-existing-project-doom-workspace
+      agentsmith-create-project-function
+      #'agentsmith-create-project-doom-workspace)
+
+;; perspective.el (e.g. with persp-projectile)
+(setq agentsmith-switch-to-existing-project-function
+      #'agentsmith-switch-to-existing-project-perspective
+      agentsmith-create-project-function
+      #'agentsmith-create-project-perspective)
+```
+
+The defaults are no-ops on the perspective side (just buffer selection), so users without a perspective package see no change.
 
 ## Doom Emacs
 
 AgentSmith works with Doom Emacs out of the box. Doom overrides `projectile-switch-project-action` to use its own workspace/file selection system, so `RET` in the AgentSmith buffer will automatically use Doom's project switching behavior (e.g., `+ivy/projectile-find-file` or the vertico equivalent).
 
-If you use Doom's `ui/workspaces` module, you can configure AgentSmith to switch to existing workspace tabs instead of opening the file finder:
+If you use Doom's `ui/workspaces` module, configure both the existing-project and create-project hooks so AgentSmith opens worktrees inside the right workspace tab:
 
 ```elisp
 ;; Doom config.el
 (use-package! agentsmith
   :commands (agentsmith agentsmith-workspace-list)
   :config
-  ;; Switch to existing Doom workspace tab if open
   (setq agentsmith-switch-to-existing-project-function
-        #'agentsmith-switch-to-existing-project-doom-workspace))
+        #'agentsmith-switch-to-existing-project-doom-workspace
+        agentsmith-create-project-function
+        #'agentsmith-create-project-doom-workspace))
 ```

@@ -84,6 +84,69 @@ Doom Emacs's `ui/workspaces' module."
                    (file-in-directory-p f dir)))
                (buffer-list)))))
 
+(declare-function persp-names "perspective")
+(declare-function persp-switch "perspective")
+
+(defun agentsmith-switch-to-existing-project-perspective (dir)
+  "Switch to an existing perspective.el perspective for DIR.
+For use as `agentsmith-switch-to-existing-project-function' with the
+`perspective' (and `persp-projectile') package.  The perspective name
+is the basename of DIR, matching how `persp-projectile' names them.
+Returns non-nil if file-visiting buffers belong to DIR, so the caller
+skips the new-project file finder."
+  (let ((name (file-name-nondirectory (directory-file-name dir))))
+    (when (and (fboundp 'persp-names)
+               (fboundp 'persp-switch)
+               (member name (persp-names)))
+      (persp-switch name)
+      (cl-some (lambda (buf)
+                 (when-let* ((f (buffer-file-name buf)))
+                   (file-in-directory-p f dir)))
+               (buffer-list)))))
+
+(defcustom agentsmith-create-project-function
+  #'agentsmith--create-project-default
+  "Function to create / switch to a perspective for a new project.
+Called with one argument: the project directory (with trailing slash).
+Runs after `agentsmith-switch-to-existing-project-function' returns
+nil (i.e. the project is not already open).  Should ensure that any
+perspective / workspace tab for the project exists and is active.
+Return value is ignored.
+
+Bundled helpers:
+- `agentsmith-create-project-doom-workspace' (Doom Emacs `ui/workspaces')
+- `agentsmith-create-project-perspective'    (perspective.el)"
+  :type 'function
+  :group 'agentsmith-buffer)
+
+(defun agentsmith--create-project-default (_dir)
+  "No-op default for `agentsmith-create-project-function'."
+  nil)
+
+(declare-function +workspace-new "ext:workspaces")
+(declare-function +workspace-switch "ext:workspaces")
+(declare-function +workspace-exists-p "ext:workspaces")
+
+(defun agentsmith-create-project-doom-workspace (dir)
+  "Ensure a Doom workspace tab exists for DIR and switch to it.
+For use as `agentsmith-create-project-function' with Doom Emacs's
+`ui/workspaces' module."
+  (let ((name (file-name-nondirectory (directory-file-name dir))))
+    (when (fboundp '+workspace-switch)
+      (unless (and (fboundp '+workspace-exists-p)
+                   (+workspace-exists-p name))
+        (when (fboundp '+workspace-new)
+          (+workspace-new name)))
+      (+workspace-switch name))))
+
+(defun agentsmith-create-project-perspective (dir)
+  "Ensure a perspective.el perspective exists for DIR and switch to it.
+For use as `agentsmith-create-project-function' with the `perspective'
+package.  `persp-switch' creates the perspective if it does not exist."
+  (let ((name (file-name-nondirectory (directory-file-name dir))))
+    (when (fboundp 'persp-switch)
+      (persp-switch name))))
+
 ;;; Faces
 
 (defface agentsmith-workspace-heading
@@ -583,6 +646,8 @@ On a column heading: swap the column with the one above."
 ;;; Project Switching
 
 (declare-function projectile-add-known-project "projectile" (project-root))
+(declare-function projectile-project-files "projectile" (project-root))
+(defvar projectile-switch-project-action)
 
 (defun agentsmith--switch-to-existing-project-default (project-dir)
   "Switch to PROJECT-DIR if it has open file-visiting buffers.
@@ -602,12 +667,35 @@ detection, which can return stale results due to project root caching."
         (switch-to-buffer (car bufs)))
       t)))
 
-(defun agentsmith--switch-to-project (directory)
-  "Switch to DIRECTORY, using its parent workspace as the projectile project.
-If the project is already open (has file-visiting buffers), switches to
-it via `agentsmith-switch-to-existing-project-function' instead of
-showing the file finder.  Falls back to `projectile-switch-project-action'
-for new projects."
+(defun agentsmith--find-file-in-worktree (ws wt)
+  "Run a file finder scoped to worktree WT inside workspace WS.
+Lists project files of WT, then `find-file's the choice with
+`projectile-project-root' bound to WS's directory so the resulting
+buffer is associated with the workspace project."
+  (let* ((wt-dir (file-name-as-directory (agentsmith-worktree-path wt)))
+         (ws-dir (file-name-as-directory
+                  (agentsmith-workspace-directory ws)))
+         (files (let ((projectile-project-root wt-dir))
+                  (projectile-project-files wt-dir)))
+         (choice (completing-read
+                  (format "Find file [%s]: "
+                          (agentsmith-worktree-name wt))
+                  files nil t)))
+    (let ((projectile-project-root ws-dir))
+      (projectile-add-known-project ws-dir)
+      (find-file (expand-file-name choice wt-dir)))))
+
+(defun agentsmith--switch-to-project (directory &optional action)
+  "Switch projectile to DIRECTORY's parent workspace, then run ACTION.
+The workspace becomes the active projectile project so that perspective
+integrations (Doom workspaces, persp-projectile, ...) hooked into
+`projectile-before-switch-project-hook' /
+`projectile-after-switch-project-hook' create or switch to a
+perspective named after the workspace, not after a worktree.
+If the project is already open, calls
+`agentsmith-switch-to-existing-project-function' instead.
+ACTION, if non-nil, is bound as `projectile-switch-project-action'
+for the duration of the new-project switch."
   (when (derived-mode-p 'agentsmith-mode)
     (quit-window))
   (let* ((dir (file-name-as-directory (expand-file-name directory)))
@@ -617,16 +705,28 @@ for new projects."
                            (agentsmith-workspace-directory ws))
                         dir)))
     (projectile-add-known-project project-dir)
-    (let ((projectile-project-root project-dir))
-      (unless (funcall agentsmith-switch-to-existing-project-function project-dir)
-        (let ((default-directory dir))
-          (funcall projectile-switch-project-action))))))
+    (unless (funcall agentsmith-switch-to-existing-project-function project-dir)
+      ;; Workspace dirs aren't real projectile projects, so neither
+      ;; `projectile-switch-project-by-name'-based bridges (Doom advice,
+      ;; persp-projectile) nor projectile's switch hooks reliably fire
+      ;; here.  Hand off to a user-configurable function that creates /
+      ;; switches the perspective directly via the package's own API.
+      (funcall agentsmith-create-project-function project-dir)
+      (let ((default-directory project-dir))
+        (funcall (or action projectile-switch-project-action))))))
 
 ;;; Default Open Functions
 
 (defun agentsmith-worktree-open-default (worktree)
-  "Default function to open WORKTREE -- switches to it as a project."
-  (agentsmith--switch-to-project (agentsmith-worktree-path worktree)))
+  "Default function to open WORKTREE.
+Switches projectile to the parent workspace (so perspective
+integrations create/switch the workspace's perspective via projectile's
+hooks), then runs the worktree-scoped file finder."
+  (let* ((wt-dir (agentsmith-worktree-path worktree))
+         (ws (agentsmith-workspace-find-by-directory wt-dir)))
+    (agentsmith--switch-to-project
+     wt-dir
+     (when ws (lambda () (agentsmith--find-file-in-worktree ws worktree))))))
 
 (defun agentsmith-workspace-open-default (workspace)
   "Default function to open WORKSPACE -- switches to it as a project."

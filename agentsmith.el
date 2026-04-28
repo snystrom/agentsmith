@@ -263,9 +263,7 @@ switches to the selected one via `projectile-switch-project-action'."
 
 ;;;###autoload
 (defun agentsmith-worktree-find-file ()
-  "Select a worktree in the current workspace and open its file finder.
-Uses `completing-read' to list all worktrees, then opens
-`projectile-switch-project-action' in the selected worktree."
+  "Select a worktree in the current workspace and open its file finder."
   (interactive)
   (let* ((dir (expand-file-name default-directory))
          (ws (or (car (agentsmith-worktree-find-by-directory dir))
@@ -288,18 +286,7 @@ Uses `completing-read' to list all worktrees, then opens
                       (format "Worktree [%s]: " (agentsmith-workspace-name ws))
                       candidates nil t))
              (wt (cdr (assoc choice candidates))))
-        (let* ((wt-dir (file-name-as-directory (agentsmith-worktree-path wt)))
-               (ws-dir (file-name-as-directory
-                        (agentsmith-workspace-directory ws)))
-               (files (let ((projectile-project-root wt-dir))
-                        (projectile-project-files wt-dir)))
-               (choice (completing-read
-                        (format "Find file [%s]: "
-                                (agentsmith-worktree-name wt))
-                        files nil t)))
-          (let ((projectile-project-root ws-dir))
-            (projectile-add-known-project ws-dir)
-            (find-file (expand-file-name choice wt-dir))))))))
+        (agentsmith--find-file-in-worktree ws wt)))))
 
 ;;;###autoload
 (defun agentsmith-workspace-switch-buffer ()
