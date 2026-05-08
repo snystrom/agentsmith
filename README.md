@@ -105,6 +105,7 @@ Doom Emacs
 | `a` | Workspace | Workspace agent transient menu |
 | `a` | Worktree | Worktree agent transient menu |
 | `w` | Workspace | Add a worktree |
+| `W` | Workspace (Select VCS) | Add a worktree, pick vcs backend to use |
 | `x` | Any | Delete menu (`d` deregister, `D` delete from disk) |
 | `p` | Workspace | Open plans directory |
 | `c` | Global | Create workspace |

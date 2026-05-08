@@ -50,6 +50,7 @@
    ("x" "Delete..."         agentsmith-transient-delete)]
   ["Worktree"
    ("w" "Add worktree"      agentsmith-dispatch--add-worktree)
+   ("W" "Add worktree (select VCS)" agentsmith-dispatch--add-worktree-select-vcs)
    ("V" "Open VCS interface" agentsmith-vcs-at-point)]
   ["Agent"
    ("a" "Start agent"       agentsmith-dispatch--start-agent)
@@ -114,6 +115,14 @@
   (interactive)
   (if-let* ((ws (agentsmith--workspace-at-point)))
       (agentsmith-workspace-add-worktree-interactive ws)
+    (user-error "Place cursor on a workspace first")))
+
+(defun agentsmith-dispatch--add-worktree-select-vcs ()
+  "Add a worktree to the workspace at point, prompting for VCS backend."
+  (interactive)
+  (if-let* ((ws (agentsmith--workspace-at-point)))
+      (agentsmith-workspace-add-worktree-interactive
+       ws #'agentsmith-worktree-read-vcs)
     (user-error "Place cursor on a workspace first")))
 
 (defun agentsmith-dispatch--remove-worktree ()

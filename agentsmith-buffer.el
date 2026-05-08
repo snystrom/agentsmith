@@ -209,6 +209,7 @@ Active when point is on a workspace heading."
   "V"           #'agentsmith-workspace-vcs-at-point
   "a"           #'agentsmith-workspace-agent-at-point
   "w"           #'agentsmith-workspace-add-worktree-at-point
+  "W"           #'agentsmith-workspace-add-worktree-select-vcs-at-point
   "x"           #'agentsmith-transient-delete
   "p"           #'agentsmith-transient-workspace-plans
   "m"           #'agentsmith-kanban-move-workspace-at-point
@@ -780,6 +781,16 @@ otherwise starts an agent directly."
       (agentsmith-workspace-add-worktree-interactive ws)
     (user-error "No workspace at point")))
 
+(defun agentsmith-workspace-add-worktree-select-vcs-at-point ()
+  "Add a worktree to the workspace at point, prompting for VCS backend.
+Bypasses the default jj-over-git precedence by asking the user which
+VCS to use via `agentsmith-worktree-read-vcs'."
+  (interactive)
+  (if-let* ((ws (agentsmith--workspace-at-point)))
+      (agentsmith-workspace-add-worktree-interactive
+       ws #'agentsmith-worktree-read-vcs)
+    (user-error "No workspace at point")))
+
 (defun agentsmith-workspace-delete-at-point ()
   "Deregister the workspace at point (keep files on disk)."
   (interactive)
@@ -928,14 +939,23 @@ Dispatches to the worktree agent transient if available."
 
 ;;; Interactive Add Worktree
 
-(defun agentsmith-workspace-add-worktree-interactive (workspace)
+(defun agentsmith-workspace-add-worktree-interactive (workspace &optional vcs-selector)
   "Interactively add a worktree to WORKSPACE.
 Prompts for repository path. Uses the workspace name as the VCS
 worktree/branch name automatically. The display name in the UI
-is derived from the repo basename for identification."
+is derived from the repo basename for identification.
+
+VCS-SELECTOR is an optional function `(repo-path) -> vcs-symbol' used
+to choose a VCS backend for the repo. When nil (the default), the
+backend is auto-detected via `agentsmith-worktree-detect-vcs', which
+prefers jj over git when both are present. Pass
+`agentsmith-worktree-read-vcs' to prompt the user, or any custom
+function implementing an alternate selection strategy."
   (let* ((repo-path (read-directory-name "Repository path: "
                                          agentsmith-default-repo-parent))
-         (vcs (agentsmith-worktree-detect-vcs repo-path))
+         (vcs (if vcs-selector
+                  (funcall vcs-selector repo-path)
+                (agentsmith-worktree-detect-vcs repo-path)))
          (ws-name (agentsmith-workspace-name workspace))
          (repo-basename (file-name-nondirectory (directory-file-name repo-path)))
          (target-dir (expand-file-name repo-basename

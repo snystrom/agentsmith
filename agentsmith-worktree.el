@@ -58,6 +58,34 @@ Checks .jj first since jj repos also contain .git."
       'git)
      (t nil))))
 
+(defun agentsmith-worktree-available-vcs (repo-path)
+  "Return list of available VCS symbols at REPO-PATH.
+Order matches default precedence: jj first when present, then git.
+Returns nil if neither is detected."
+  (let ((path (expand-file-name repo-path))
+        (result nil))
+    (when (or (file-directory-p (expand-file-name ".git" path))
+              (file-regular-p (expand-file-name ".git" path)))
+      (push 'git result))
+    (when (file-directory-p (expand-file-name ".jj" path))
+      (push 'jj result))
+    result))
+
+(defun agentsmith-worktree-read-vcs (repo-path &optional prompt)
+  "Prompt for a VCS symbol from those available at REPO-PATH.
+Always prompts via `completing-read', even when only one backend is
+available, so the user can confirm the choice explicitly.
+Suitable for use as the VCS-SELECTOR argument to
+`agentsmith-workspace-add-worktree-interactive'.
+Errors when no VCS is detected at REPO-PATH."
+  (let ((available (agentsmith-worktree-available-vcs repo-path)))
+    (unless available
+      (user-error "No git or jj repository found at: %s" repo-path))
+    (intern (completing-read (or prompt "VCS backend: ")
+                             (mapcar #'symbol-name available)
+                             nil t nil nil
+                             (symbol-name (car available))))))
+
 ;;; Generic Protocol
 
 (cl-defgeneric agentsmith-worktree-create (vcs repo-path target-dir name &optional branch)
