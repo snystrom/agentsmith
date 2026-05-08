@@ -26,6 +26,20 @@ ex want something more like:
 * DONE pressing RET on a worktree opens the find-file-in workspace interface
 ** expose this as an agentsmith configurable, ex doom emacs users might want to register +ivy/projectile-find-file or similar rather than the normal projectile-find-file interface, etc.
 * TODO export the doom projectile stub as a helper setting to make enabling easier
+* TODO branch shown on worktree section is stale
+The =:branch= slot on =agentsmith-worktree= is set once at creation
+(=agentsmith-buffer.el= ~line 953, ~:branch ws-name~) and persisted in
+=.agentsmith.el=. Render at =agentsmith-buffer.el= ~line 335 reads the
+cached value, so:
+- the displayed branch is always the workspace name, not the actual git
+  branch in the worktree;
+- switching branches in the worktree (e.g. via magit) never updates the
+  agentsmith UI.
+A correct live-query already exists: =agentsmith-worktree-branch-info=
+in =agentsmith-worktree.el= (git: ~rev-parse --abbrev-ref HEAD~; jj:
+bookmarks template). Fix is to call it at render time and treat the
+cached =:branch= slot as a fallback only.
+
 * TODO multiple agents per workspace / worktree
 lets extend the capabilities a little more to support multiple backends per
  workspace and worktree. There should now be global config options for workspace
