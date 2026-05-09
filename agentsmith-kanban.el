@@ -94,6 +94,22 @@ Workspaces in that column become unsorted (caller handles)."
               col))
           columns))
 
+(defun agentsmith-kanban-remove-workspace-from-columns (columns ws-name)
+  "Return COLUMNS with WS-NAME removed from every column."
+  (mapcar (lambda (col)
+            (cons (car col)
+                  (cl-remove ws-name (cdr col) :test #'string=)))
+          columns))
+
+(defun agentsmith-kanban-remove-workspace (ws-name)
+  "Remove WS-NAME from the kanban org file.
+No-op if the file does not exist."
+  (when (file-readable-p agentsmith-kanban-file)
+    (let* ((columns (agentsmith-kanban-read))
+           (cleaned (agentsmith-kanban-remove-workspace-from-columns
+                     columns ws-name)))
+      (agentsmith-kanban-write cleaned))))
+
 (defun agentsmith-kanban-move-workspace (columns ws-name target-column)
   "Return COLUMNS with WS-NAME moved to TARGET-COLUMN.
 Removes WS-NAME from its current column (if any) and appends to target."

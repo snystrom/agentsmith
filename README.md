@@ -116,7 +116,7 @@ Doom Emacs
 
 ### Evil Mode
 
-Evil normal-state bindings are set up automatically when evil is loaded. All the above keys work from normal state. `gr` refreshes (standard evil pattern).
+Evil normal-state bindings are set up automatically when evil is loaded. All the above keys work from normal state.
 
 ### Doom Emacs
 

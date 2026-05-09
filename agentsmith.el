@@ -67,6 +67,13 @@
 (require 'agentsmith-buffer)
 (require 'agentsmith-transient)
 
+(defun agentsmith--kanban-cleanup-on-delete (workspace)
+  "Remove WORKSPACE from the kanban org file when it is deleted."
+  (agentsmith-kanban-remove-workspace (agentsmith-workspace-name workspace)))
+
+(add-hook 'agentsmith-after-workspace-delete-hook
+          #'agentsmith--kanban-cleanup-on-delete)
+
 ;;; Customization Group (top-level)
 
 (defgroup agentsmith nil
