@@ -182,6 +182,31 @@ To override the open behavior entirely:
         (dired (agentsmith-workspace-directory ws))))
 ```
 
+### Worktree branch name
+
+When you add a worktree to a workspace, AgentSmith uses the workspace name as the git branch / jj workspace name. To customize the mapping, set `agentsmith-worktree-branch-name-function` to a function that takes the workspace name and returns a branch name:
+
+```elisp
+;; Prefix every branch with "yourprefix/"
+(setq agentsmith-worktree-branch-name-function
+      (lambda (ws-name) (format "yourprefix/%s" ws-name)))
+```
+
+So creating a workspace named `my-feature` produces a branch `yourprefix/my-feature`. Leave it as `nil` (the default) to use the workspace name as-is.
+
+You can also prompt at worktree-creation time to pick between styles:
+
+```elisp
+(setq agentsmith-worktree-branch-name-function
+      (lambda (ws-name)
+        (pcase (completing-read
+                (format "Branch style for %s: " ws-name)
+                '("username-prefix" "no-prefix")
+                nil t)
+          ("username-prefix" (format "yourprefix/%s" ws-name))
+          ("no-prefix"       ws-name))))
+```
+
 ### VCS interface
 
 Press `V` on a worktree to open its VCS interface, or use `M-x agentsmith-worktree-open-vcs` from any buffer inside a worktree. The function called is controlled by `agentsmith-worktree-vcs-mode-functions`, an alist mapping VCS symbols to functions.

@@ -47,6 +47,17 @@ Override to customize behavior, e.g. for project.el integration."
   :type 'function
   :group 'agentsmith-buffer)
 
+(defcustom agentsmith-worktree-branch-name-function nil
+  "Function to derive a VCS branch name from a workspace name.
+Called with one argument: the workspace name (string).  Must return
+the string to use as the git branch / jj workspace name when creating
+a worktree.
+
+When nil (the default), the workspace name is used as-is."
+  :type '(choice (const :tag "Use workspace name as-is" nil)
+                 function)
+  :group 'agentsmith-buffer)
+
 (defcustom agentsmith-workspace-open-function #'agentsmith-workspace-open-default
   "Function called to open a workspace.
 Receives one argument: the `agentsmith-workspace' struct.
@@ -942,8 +953,9 @@ Dispatches to the worktree agent transient if available."
 (defun agentsmith-workspace-add-worktree-interactive (workspace &optional vcs-selector)
   "Interactively add a worktree to WORKSPACE.
 Prompts for repository path. Uses the workspace name as the VCS
-worktree/branch name automatically. The display name in the UI
-is derived from the repo basename for identification.
+worktree/branch name automatically -- customizable via
+`agentsmith-worktree-branch-name-function'. The display name in the
+UI is derived from the repo basename for identification.
 
 VCS-SELECTOR is an optional function `(repo-path) -> vcs-symbol' used
 to choose a VCS backend for the repo. When nil (the default), the
@@ -957,20 +969,22 @@ function implementing an alternate selection strategy."
                   (funcall vcs-selector repo-path)
                 (agentsmith-worktree-detect-vcs repo-path)))
          (ws-name (agentsmith-workspace-name workspace))
+         (branch-name (if agentsmith-worktree-branch-name-function
+                          (funcall agentsmith-worktree-branch-name-function ws-name)
+                        ws-name))
          (repo-basename (file-name-nondirectory (directory-file-name repo-path)))
          (target-dir (expand-file-name repo-basename
                                        (agentsmith-workspace-directory workspace))))
     (unless vcs
       (user-error "No git or jj repository found at: %s" repo-path))
-    ;; Create the worktree on disk -- use workspace name for VCS name/branch
-    (agentsmith-worktree-create vcs repo-path target-dir ws-name ws-name)
+    (agentsmith-worktree-create vcs repo-path target-dir branch-name branch-name)
     ;; Build the struct and add to workspace
     (let ((wt (make-agentsmith-worktree
                :name repo-basename
                :path target-dir
                :source-repo (expand-file-name repo-path)
                :vcs vcs
-               :branch ws-name)))
+               :branch branch-name)))
       (agentsmith-workspace-add-worktree workspace wt)
       (when (derived-mode-p 'agentsmith-mode)
         (agentsmith-buffer-refresh))
