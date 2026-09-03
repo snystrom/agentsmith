@@ -39,6 +39,16 @@ Customize this to change how agent status is shown in the buffer."
                 :value-type (cons string face))
   :group 'agentsmith-buffer)
 
+(defcustom agentsmith-default-view 'workspaces
+  "View shown when an AgentSmith buffer is created.
+`workspaces' is the flat list of all workspaces; `kanban' groups them
+into the columns defined in `agentsmith-kanban-file'.
+Switch views in a live buffer with \\[agentsmith-buffer-view-workspaces]
+and \\[agentsmith-buffer-view-kanban]."
+  :type '(choice (const :tag "Flat workspace list" workspaces)
+                 (const :tag "Kanban columns" kanban))
+  :group 'agentsmith-buffer)
+
 (defcustom agentsmith-worktree-open-function #'agentsmith-worktree-open-default
   "Function called to open a worktree.
 Receives one argument: the `agentsmith-worktree' struct.
@@ -178,8 +188,9 @@ Active when point is on a column heading."
 (defvar-local agentsmith--workspaces nil
   "List of `agentsmith-workspace' structs displayed in this buffer.")
 
-(defvar-local agentsmith--current-view 'workspaces
-  "Current view mode: `workspaces' (flat list) or `kanban' (columns).")
+(defvar-local agentsmith--current-view nil
+  "Current view mode: `workspaces' (flat list) or `kanban' (columns).
+Initialized from `agentsmith-default-view' by `agentsmith-mode'.")
 
 (defvar-local agentsmith--kanban-columns nil
   "Cached parsed kanban columns alist from kanban.org.")
@@ -974,6 +985,7 @@ Users can override bindings with `keymap-set'."
 
 \\{agentsmith-mode-map}"
   :group 'agentsmith
+  (setq agentsmith--current-view agentsmith-default-view)
   (setq-local revert-buffer-function #'agentsmith-buffer-refresh)
   (setq-local bookmark-make-record-function #'agentsmith--bookmark-make-record))
 
