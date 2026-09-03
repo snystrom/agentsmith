@@ -164,6 +164,16 @@ AgentSmith uses three directory settings:
   (setq agentsmith-workspace-directory "~/.config/emacs/.local/agentsmith/"))
 ```
 
+### Default view
+
+The status buffer opens in the flat workspace list. Set `agentsmith-default-view` to `kanban` to open in the kanban column view instead:
+
+```elisp
+(setq agentsmith-default-view 'kanban)
+```
+
+Either way you can switch views in a live buffer with the view commands (`agentsmith-buffer-view-workspaces` / `agentsmith-buffer-view-kanban`).
+
 ### Open behavior
 
 When you press `RET` on a workspace or worktree, AgentSmith calls `projectile-switch-project-action` in that directory. This means your projectile configuration controls what happens — whether that's `projectile-find-file`, a Doom-specific action, or something custom.
