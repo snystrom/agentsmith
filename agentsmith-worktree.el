@@ -86,6 +86,16 @@ Errors when no VCS is detected at REPO-PATH."
                              nil t nil nil
                              (symbol-name (car available))))))
 
+;;; Process Helpers
+
+(defun agentsmith-worktree--call-process (executable &rest args)
+  "Run EXECUTABLE with ARGS, returning (EXIT-CODE . OUTPUT).
+OUTPUT is the combined, trimmed stdout and stderr, so callers can
+include the VCS tool's own explanation in error messages."
+  (with-temp-buffer
+    (let ((exit-code (apply #'call-process executable nil t nil args)))
+      (cons exit-code (string-trim (buffer-string))))))
+
 ;;; Generic Protocol
 
 (cl-defgeneric agentsmith-worktree-create (vcs repo-path target-dir name &optional branch)
@@ -141,11 +151,12 @@ Creates a new branch named BRANCH (or NAME if not specified)."
 (cl-defmethod agentsmith-worktree-remove ((_vcs (eql git)) worktree-path &optional repo-path _name)
   "Remove a git worktree at WORKTREE-PATH."
   (let ((default-directory (expand-file-name (or repo-path worktree-path))))
-    (let ((exit-code
-           (call-process agentsmith-git-executable nil nil nil
-                         "worktree" "remove" (expand-file-name worktree-path))))
+    (pcase-let ((`(,exit-code . ,output)
+                 (agentsmith-worktree--call-process
+                  agentsmith-git-executable
+                  "worktree" "remove" (expand-file-name worktree-path))))
       (unless (zerop exit-code)
-        (error "Failed to remove git worktree at %s" worktree-path)))))
+        (error "Failed to remove git worktree at %s: %s" worktree-path output)))))
 
 (cl-defmethod agentsmith-worktree-branch-info ((_vcs (eql git)) worktree-path)
   "Return the current branch name for git worktree at WORKTREE-PATH."
@@ -204,11 +215,11 @@ WORKTREE-PATH identifies the workspace. REPO-PATH is the main repo.
 NAME is the jj workspace name; falls back to directory basename."
   (let* ((default-directory (expand-file-name (or repo-path worktree-path)))
          (name (or name (file-name-nondirectory (directory-file-name worktree-path)))))
-    (let ((exit-code
-           (call-process agentsmith-jj-executable nil nil nil
-                         "workspace" "forget" name)))
+    (pcase-let ((`(,exit-code . ,output)
+                 (agentsmith-worktree--call-process
+                  agentsmith-jj-executable "workspace" "forget" name)))
       (unless (zerop exit-code)
-        (error "Failed to forget jj workspace: %s" name)))))
+        (error "Failed to forget jj workspace %s: %s" name output)))))
 
 (cl-defmethod agentsmith-worktree-branch-info ((_vcs (eql jj)) worktree-path)
   "Return the current bookmark info for jj workspace at WORKTREE-PATH."
