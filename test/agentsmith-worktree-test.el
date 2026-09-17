@@ -31,16 +31,32 @@ Return (REPO-DIR . WORKTREE-DIR)."
     (cons repo wt)))
 
 (ert-deftest agentsmith-worktree-remove-git-surfaces-underlying-error ()
-  "Removing a dirty git worktree should raise git's own error text.
-Without this, the generic \"Failed to remove\" message hides the
-reason (uncommitted or untracked files) that a user needs to act on."
+  "Removing a path that is not a git worktree should raise git's own
+error text, not just a generic \"Failed to remove\" message."
+  (let* ((repo (make-temp-file "agentsmith-worktree-test-repo" t))
+         (not-a-worktree (expand-file-name "not-a-worktree" repo)))
+    (unwind-protect
+        (progn
+          (agentsmith-worktree-test--git repo "init" "-q")
+          (agentsmith-worktree-test--git repo "commit" "--allow-empty" "-q" "-m" "init")
+          (make-directory not-a-worktree)
+          (let ((err (should-error (agentsmith-worktree-remove 'git not-a-worktree repo))))
+            (should (string-match-p "is not a working tree"
+                                    (error-message-string err)))))
+      (delete-directory repo t))))
+
+(ert-deftest agentsmith-worktree-remove-git-force-removes-dirty-worktree ()
+  "Removing a dirty git worktree should succeed.
+Agent worktrees routinely have uncommitted or untracked changes, so
+removal must force past git's dirty-worktree guard rather than
+erroring on the common case."
   (let* ((dirs (agentsmith-worktree-test--make-dirty-git-worktree))
          (repo (car dirs))
          (wt (cdr dirs)))
     (unwind-protect
-        (let ((err (should-error (agentsmith-worktree-remove 'git wt repo))))
-          (should (string-match-p "modified or untracked"
-                                  (error-message-string err))))
+        (progn
+          (agentsmith-worktree-remove 'git wt repo)
+          (should-not (file-exists-p wt)))
       (delete-directory repo t))))
 
 (provide 'agentsmith-worktree-test)

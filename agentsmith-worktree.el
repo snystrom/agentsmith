@@ -149,12 +149,14 @@ Creates a new branch named BRANCH (or NAME if not specified)."
       target)))
 
 (cl-defmethod agentsmith-worktree-remove ((_vcs (eql git)) worktree-path &optional repo-path _name)
-  "Remove a git worktree at WORKTREE-PATH."
+  "Remove a git worktree at WORKTREE-PATH.
+Forces removal since agent worktrees routinely have uncommitted or
+untracked changes that would otherwise make git refuse."
   (let ((default-directory (expand-file-name (or repo-path worktree-path))))
     (pcase-let ((`(,exit-code . ,output)
                  (agentsmith-worktree--call-process
                   agentsmith-git-executable
-                  "worktree" "remove" (expand-file-name worktree-path))))
+                  "worktree" "remove" "--force" (expand-file-name worktree-path))))
       (unless (zerop exit-code)
         (error "Failed to remove git worktree at %s: %s" worktree-path output)))))
 
